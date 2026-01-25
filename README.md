@@ -15,13 +15,11 @@ What sets Sidewalk apart is its **Stellar-powered accountability layer**. By anc
 Civic reporting tools already exist—but trust, incentives, and accountability are often missing.
 
 Most platforms are:
-
 * Centralized and opaque
 * Easy to manipulate or abandon
 * Focused on reporting, not resolution
 
 Sidewalk is built around a different idea:
-
 **Civic participation should be verifiable, incentivized, and impossible to ignore.**
 
 By combining community reporting with blockchain-backed transparency, Sidewalk transforms everyday civic complaints into durable public records and measurable performance data.
@@ -43,164 +41,133 @@ By combining community reporting with blockchain-backed transparency, Sidewalk t
 Sidewalk uses **Stellar** as a trust and coordination layer—not as hype, but as infrastructure.
 
 ### 1. Proof & Transparency
-
 Every critical civic action is anchored on-chain:
-
 * Issue creation
 * Official acknowledgement
 * Resolution confirmation
 * Time-to-fix metrics
 
-Each report is associated with a **Stellar transaction hash**, providing immutable, timestamped proof.
-
-This ensures that complaints cannot be edited, hidden, or erased after submission.
-
----
+Each report is associated with a **Stellar transaction hash**, providing immutable, timestamped proof. This ensures that complaints cannot be edited, hidden, or erased after submission.
 
 ### 2. Tokenized Civic Accountability
-
-Sidewalk introduces a **community civic token** on Stellar:
-
-Citizens earn tokens for:
-
-* Submitting valid reports
-* Verifying other users’ reports
-* Uploading proof that an issue has been fixed
-
-Tokens can be used to:
-
-* Vote on priority issues
-* Participate in community decisions
-* Access local civic perks or discounts
-* Donate to transparent repair funds
-
-Reporting becomes **participation**, not noise.
-
----
+Sidewalk introduces a **community civic token** on Stellar. Citizens earn tokens for submitting valid reports and verifying others. Tokens can be used to vote on priority issues or access local civic perks.
 
 ### 3. Smart Escalation & Deadlines
-
-Sidewalk enforces accountability through time-bound logic:
-
-* Issues have resolution windows
-* Missed deadlines trigger automatic escalation
-* Unresolved issues surface on a public **Hall of Accountability**
-* Districts and officials can be ranked by responsiveness
-
-Performance is no longer anecdotal—it’s measurable.
-
----
-
-### 4. Community Verification (Anti-Fake Reports)
-
-To prevent spam or false claims:
-
-* Reports require community confirmation
-* Verifiers stake small amounts of tokens
-* Confirmed reports reward reporters and verifiers
-* False reports result in slashed stakes
-
-This creates a self-policing system where honesty is economically aligned.
-
----
-
-### 5. Public Funding & Micro‑Grants
-
-Sidewalk enables transparent community-led funding:
-
-* Repair funds live on Stellar
-* Donations are fully traceable
-* Contractors receive payment only after community verification
-
-Example flow:
-
-1. Citizens fund a broken streetlight
-2. Contractor submits before/after evidence
-3. Community verifies completion
-4. Funds are released
-
-No missing money. No closed doors.
-
----
-
-### 6. Civic Reputation Scores
-
-Every participant builds an on-chain reputation:
-
-* **Citizens** – Accuracy and participation
-* **Officials** – Response speed and resolution rate
-* **Contractors** – Quality and delivery time
-
-Civic history becomes data.
-
-> Elections meet metrics.
+Sidewalk enforces accountability through time-bound logic. Missed deadlines trigger automatic escalation, and unresolved issues surface on a public **Hall of Accountability**.
 
 ---
 
 ## 🧱 Architecture Overview
 
-Sidewalk is built as a scalable monorepo with a clean separation between civic logic, user experience, and blockchain integration.
+Sidewalk is built as a scalable **Monorepo** using `pnpm` workspaces, with a clear separation between the API, mobile experience, and shared services.
 
-| Layer               | Technology                    |
-| ------------------- | ----------------------------- |
-| Frontend            | React (Web & Mobile-ready)    |
-| Backend API         | Node.js / NestJS              |
-| Database            | MongoDB                       |
-| Blockchain          | **Stellar**                   |
-| Tokens & Reputation | Stellar assets & transactions |
-| Authentication      | Token-based auth              |
-| Media Storage       | Cloud object storage          |
-| Maps & Location     | Geolocation & mapping APIs    |
+| Layer | Technology |
+| :--- | :--- |
+| **Frontend** | React Native (Expo) |
+| **Backend API** | Node.js / Express (Modular Monolith) |
+| **Database** | MongoDB |
+| **Blockchain** | **Stellar** (via `@sidewalk/stellar` package) |
+| **Tooling** | `pnpm`, TypeScript, `tsx` |
 
 ---
 
 ## 📦 Monorepo Structure
 
-```
+```text
 sidewalk/
 ├── apps/
-│   ├── web/                 # Citizen-facing web app
-│   ├── mobile/              # Mobile app (future-ready)
-│   └── api/                 # Backend API
-├── libs/
-│   ├── reports/             # Issue reporting & status logic
-│   ├── verification/        # Community confirmation flows
-│   ├── reputation/          # Civic reputation scoring
-│   ├── tokens/              # Stellar token logic
-│   ├── funding/             # Community funds & payouts
-│   └── utils/               # Shared utilities
-├── contracts/               # Stellar smart contracts
-├── tests/                   # Unit & integration tests
-├── .env.example
-├── package.json
-└── README.md
+│   ├── api/              # Express backend (Modular Monolith)
+│   └── mobile/           # React Native App (Expo)
+│
+├── packages/
+│   └── stellar/          # Shared Stellar Service & SDK
+│
+├── config/               # Shared configurations
+├── package.json          # Root workspace config
+└── pnpm-workspace.yaml   # Workspace definitions
+
 ```
 
 ---
 
 ## 🚀 Getting Started
 
-### Prerequisites
+Follow these steps to get the development environment running.
 
-* Node.js ≥ 18
-* MongoDB
-* Stellar Testnet account
-* npm or Yarn
+### 1. Prerequisites
 
-### Installation
+* **Node.js** (v18 or higher)
+* **pnpm** (Install via `npm install -g pnpm`)
+* **MongoDB** (Running locally or via Atlas)
+* **Expo Go** app on your phone (optional, for physical device testing)
+
+### 2. Installation
+
+Clone the repo and install dependencies using `pnpm`.
 
 ```bash
-git clone https://github.com/your-org/sidewalk.git
+git clone [https://github.com/your-org/sidewalk.git](https://github.com/your-org/sidewalk.git)
 cd sidewalk
-npm install
-cp .env.example .env
+
+# Install all dependencies for all packages
+pnpm install
+
 ```
 
-### Run Locally
+### 3. Build Shared Packages
+
+Before running the apps, you must build the shared `@sidewalk/stellar` package so the API can consume it.
 
 ```bash
-npm run dev
+# Build all packages
+pnpm -r build
+
 ```
+
+### 4. Configure Environment
+
+Set up the environment variables for the API.
+
+```bash
+# Create the .env file in the API folder
+cp apps/api/.env.example apps/api/.env
+
+# Update apps/api/.env with your MongoDB URI (defaults to local)
+# MONGO_URI=mongodb://localhost:27017/sidewalk
+
+```
+
+---
+
+## 🏃‍♂️ Running the Project
+
+You will typically run the Backend and the Mobile App in two separate terminal tabs.
+
+### Terminal 1: Backend API
+
+This starts the Express server in watch mode.
+
+```bash
+# Run from the root directory
+npm run dev:api
+
+```
+
+*You should see: `🚀 Server running on port 5000` and `✨ Stellar Service initialized`.*
+
+### Terminal 2: Mobile App
+
+This starts the Expo development server.
+
+```bash
+cd apps/mobile
+npx expo start
+
+```
+
+* Press `a` to run on **Android Emulator**.
+* Press `i` to run on **iOS Simulator**.
+* Scan the QR code to run on your physical device.
 
 ---
 
@@ -208,22 +175,14 @@ npm run dev
 
 Sidewalk is open-source and built for contributors who care about civic tech, transparency, and real-world impact.
 
-We welcome contributions across frontend, backend, blockchain, data modeling, and UX.
-
-### How to Contribute
-
 1. Fork the repository
 2. Create a branch from `main`
 3. Pick an issue or propose one
-4. Keep pull requests focused and documented
-5. Add tests where applicable
-6. Open a PR with context and screenshots
+4. Open a PR with context and screenshots
 
 ---
 
 ## 💬 Community & Support
-
-For discussions, questions, or collaboration:
 
 👉 Telegram: [https://t.me/+gRA3CdyekZw3MWM0](https://t.me/+gRA3CdyekZw3MWM0)
 
@@ -232,3 +191,7 @@ For discussions, questions, or collaboration:
 ## 📄 License
 
 MIT License
+
+```
+
+```
