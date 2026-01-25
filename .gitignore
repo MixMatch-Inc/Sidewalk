@@ -1,0 +1,95 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment Variables (CRITICAL: Never commit these)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Build Outputs & Artifacts
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Expo / React Native
+.expo/
+web-build/
+*.jks
+*.keystore
+*.pem
+
+# Mobile Generated Folders (If you ever run 'npx expo prebuild')
+# apps/mobile/android/
+# apps/mobile/ios/
+
+# Temporary Files
+tmp/
+temp/
+
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+app-example
+
+# generated native folders
+/ios
+/android
+node_modules

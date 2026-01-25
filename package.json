@@ -1,0 +1,24 @@
+{
+  "name": "sidewalk",
+  "version": "1.0.0",
+  "description": "**Sidewalk** is an open-source, civic reporting and accountability platform that empowers citizens to document local issues, track government response, and ensure follow-through—publicly and transparently.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev:api": "pnpm --filter sidewalk-api dev",
+    "dev:mobile": "pnpm --filter mobile start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mixmatch/Sidewalk.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mixmatch/Sidewalk/issues"
+  },
+  "homepage": "https://github.com/Mixmatch/Sidewalk#readme"
+}
