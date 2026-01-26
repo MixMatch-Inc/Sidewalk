@@ -1,5 +1,7 @@
 # 🛣️ Sidewalk
 
+[![CI](https://github.com/MixMatch-Inc/Sidewalk/actions/workflows/ci.yml/badge.svg)](https://github.com/MixMatch-Inc/Sidewalk/actions/workflows/ci.yml)
+
 **Sidewalk** is an open-source, civic reporting and accountability platform that empowers citizens to document local issues, track government response, and ensure follow-through—publicly and transparently.
 
 Citizens can report problems like damaged roads, broken streetlights, flooding, waste issues, or public safety concerns, attach media and location data, and monitor progress from *reported* to *resolved*.
@@ -171,6 +173,27 @@ npx expo start
 
 ---
 
+## ✅ Local Quality Checks
+
+Before submitting a PR, run these checks locally to ensure CI will pass:
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run all checks for a specific package
+pnpm --filter sidewalk-api lint && pnpm --filter sidewalk-api typecheck && pnpm --filter sidewalk-api build
+pnpm --filter mobile lint && pnpm --filter mobile typecheck
+pnpm --filter @sidewalk/stellar lint && pnpm --filter @sidewalk/stellar typecheck && pnpm --filter @sidewalk/stellar build
+
+# Or run checks individually
+pnpm --filter <package-name> lint       # Run ESLint
+pnpm --filter <package-name> typecheck  # Run TypeScript type checking
+pnpm --filter <package-name> build      # Build the package
+```
+
+---
+
 ## 🤝 Contributing
 
 Sidewalk is open-source and built for contributors who care about civic tech, transparency, and real-world impact.
@@ -179,6 +202,7 @@ Sidewalk is open-source and built for contributors who care about civic tech, tr
 2. Create a branch from `main`
 3. Pick an issue or propose one
 4. Open a PR with context and screenshots
+5. Ensure CI checks pass before requesting review
 
 ---
 
