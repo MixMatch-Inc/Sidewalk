@@ -6,6 +6,7 @@ import {
   Operation,
   Asset,
   Memo,
+  ChangeTrustOperation,
 } from "@stellar/stellar-sdk";
 
 export class StellarService {
@@ -87,6 +88,44 @@ export class StellarService {
         error.response?.data?.extras?.result_codes || error.message,
       );
       throw new Error("Failed to anchor hash on Stellar.");
+    }
+  }
+
+  async changeTrust(
+    assetCode: string,
+    issuerPublicKey: string,
+    limit: string = "10000000",
+  ): Promise<string> {
+    console.log(`🤝 Establishing trust for ${assetCode}...`);
+
+    const account = await this.server.loadAccount(this.getPublicKey());
+    const asset = new Asset(assetCode, issuerPublicKey);
+
+    const tx = new TransactionBuilder(account, {
+      fee: "100",
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.changeTrust({
+          asset: asset,
+          limit: limit,
+        }),
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(this.keypair);
+
+    try {
+      const result = await this.server.submitTransaction(tx);
+      console.log(`✅ Trustline created! TX: ${result.hash}`);
+      return result.hash;
+    } catch (error: any) {
+      console.error(
+        "❌ Change Trust failed:",
+        error.response?.data?.extras?.result_codes || error.message,
+      );
+      throw new Error("Failed to change trust.");
     }
   }
 }
