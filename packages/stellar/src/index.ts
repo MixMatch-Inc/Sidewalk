@@ -6,6 +6,7 @@ import {
   Operation,
   Asset,
   Memo,
+  ChangeTrustOperation,
 } from "@stellar/stellar-sdk";
 
 export class StellarService {
@@ -109,6 +110,12 @@ export class StellarService {
 
   async sendAsset(destination: string, amount: string, assetCode: string, issuerPublicKey: string): Promise<string> {
     console.log(`Sending ${amount} ${assetCode} to ${destination}...`);
+  async changeTrust(
+    assetCode: string,
+    issuerPublicKey: string,
+    limit: string = "10000000",
+  ): Promise<string> {
+    console.log(`🤝 Establishing trust for ${assetCode}...`);
 
     const account = await this.server.loadAccount(this.getPublicKey());
     const asset = new Asset(assetCode, issuerPublicKey);
@@ -122,6 +129,15 @@ export class StellarService {
         asset: asset,
         amount: amount
       }))
+      fee: "100",
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.changeTrust({
+          asset: asset,
+          limit: limit,
+        }),
+      )
       .setTimeout(30)
       .build();
 
@@ -137,4 +153,14 @@ export class StellarService {
     }
   }
 
+      console.log(`✅ Trustline created! TX: ${result.hash}`);
+      return result.hash;
+    } catch (error: any) {
+      console.error(
+        "❌ Change Trust failed:",
+        error.response?.data?.extras?.result_codes || error.message,
+      );
+      throw new Error("Failed to change trust.");
+    }
+  }
 }
