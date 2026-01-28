@@ -91,6 +91,25 @@ export class StellarService {
     }
   }
 
+    async checkTrustline(userPublicKey: string, assetCode: string, issuerPublicKey: string): Promise<boolean> {
+    try {
+      const account = await this.server.loadAccount(userPublicKey);
+      
+      const hasTrust = account.balances.some((balance: any) => {
+        return (
+          balance.asset_code === assetCode && 
+          balance.asset_issuer === issuerPublicKey
+        );
+      });
+
+      return hasTrust;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async sendAsset(destination: string, amount: string, assetCode: string, issuerPublicKey: string): Promise<string> {
+    console.log(`Sending ${amount} ${assetCode} to ${destination}...`);
   async changeTrust(
     assetCode: string,
     issuerPublicKey: string,
@@ -102,6 +121,14 @@ export class StellarService {
     const asset = new Asset(assetCode, issuerPublicKey);
 
     const tx = new TransactionBuilder(account, {
+      fee: '100',
+      networkPassphrase: Networks.TESTNET
+    })
+      .addOperation(Operation.payment({
+        destination: destination,
+        asset: asset,
+        amount: amount
+      }))
       fee: "100",
       networkPassphrase: Networks.TESTNET,
     })
@@ -118,6 +145,14 @@ export class StellarService {
 
     try {
       const result = await this.server.submitTransaction(tx);
+      console.log(`Payment Sent! TX: ${result.hash}`);
+      return result.hash;
+    } catch (error: any) {
+      console.error('❌ Payment Failed:', error.response?.data?.extras?.result_codes || error.message);
+      throw new Error('Payment failed');
+    }
+  }
+
       console.log(`✅ Trustline created! TX: ${result.hash}`);
       return result.hash;
     } catch (error: any) {
