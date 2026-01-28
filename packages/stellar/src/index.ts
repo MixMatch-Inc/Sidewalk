@@ -1,12 +1,13 @@
 import {
-  Asset,
-  FeeBumpTransaction,
   Horizon,
   Keypair,
-  Memo,
+  TransactionBuilder,
   Networks,
   Operation,
-  TransactionBuilder,
+  Asset,
+  Memo,
+  Transaction,
+  FeeBumpTransaction,
 } from '@stellar/stellar-sdk';
 
 export class StellarService {
@@ -88,11 +89,17 @@ export class StellarService {
     console.log(`🔍 Verifying TX: ${txHash}`);
     try {
       const tx = await this.server.transactions().transaction(txHash).call();
-      const memoValue = tx.memo;
+
+      const memoValue = tx.memo || '';
       const timestamp = tx.created_at;
-      const onChainHashHex = Buffer.from(memoValue as any, 'base64').toString(
-        'hex',
-      );
+
+      let onChainHashHex = '';
+      if (tx.memo_type === 'hash' && memoValue) {
+        onChainHashHex = Buffer.from(memoValue, 'base64').toString('hex');
+      } else {
+        onChainHashHex = memoValue;
+      }
+
       const isValid =
         onChainHashHex === expectedHash || memoValue === expectedHash;
 
@@ -171,7 +178,7 @@ export class StellarService {
 
   async sponsorTransaction(userTxXDR: string): Promise<string> {
     console.log('⛽ Wrapping transaction with Fee Sponsorship...');
-    let innerTx;
+    let innerTx: Transaction | FeeBumpTransaction;
     try {
       innerTx = TransactionBuilder.fromXDR(userTxXDR, Networks.TESTNET);
     } catch (e) {
@@ -186,7 +193,7 @@ export class StellarService {
 
     const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
       this.keypair,
-      userTxXDR,
+      innerTx as any,
       '10000' as any,
       Networks.TESTNET,
     );
