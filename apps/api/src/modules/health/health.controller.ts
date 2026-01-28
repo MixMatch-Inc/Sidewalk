@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
-import { StellarService } from '@sidewalk/stellar';
 
-const stellarService = new StellarService();
+import { stellarService } from '../../config/stellar';
 
 export const getHealth = async (req: Request, res: Response) => {
   const stellarStatus = await stellarService.getHealth();
