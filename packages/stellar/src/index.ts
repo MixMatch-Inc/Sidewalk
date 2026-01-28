@@ -6,7 +6,8 @@ import {
   Operation,
   Asset,
   Memo,
-  ChangeTrustOperation,
+  Transaction,
+  FeeBumpTransaction
 } from "@stellar/stellar-sdk";
 
 export class StellarService {
@@ -91,76 +92,43 @@ export class StellarService {
     }
   }
 
-    async checkTrustline(userPublicKey: string, assetCode: string, issuerPublicKey: string): Promise<boolean> {
-    try {
-      const account = await this.server.loadAccount(userPublicKey);
-      
-      const hasTrust = account.balances.some((balance: any) => {
-        return (
-          balance.asset_code === assetCode && 
-          balance.asset_issuer === issuerPublicKey
-        );
-      });
+  async sponsorTransaction(userTxXDR: string): Promise<string> {
+    console.log('⛽ Wrapping transaction with Fee Sponsorship...');
 
-      return hasTrust;
-    } catch (error) {
-      return false;
+    // 1. Parse the User's transaction string back into an object
+    let innerTx: Transaction | FeeBumpTransaction;
+    try {
+      innerTx = TransactionBuilder.fromXDR(userTxXDR, Networks.TESTNET);
+    } catch (e) {
+      throw new Error('Invalid Transaction XDR provided');
     }
-  }
 
-  async sendAsset(destination: string, amount: string, assetCode: string, issuerPublicKey: string): Promise<string> {
-    console.log(`Sending ${amount} ${assetCode} to ${destination}...`);
-  async changeTrust(
-    assetCode: string,
-    issuerPublicKey: string,
-    limit: string = "10000000",
-  ): Promise<string> {
-    console.log(`🤝 Establishing trust for ${assetCode}...`);
+    // Ensure it's not already a fee bump
+    if (innerTx instanceof FeeBumpTransaction) {
+      throw new Error('Cannot sponsor a transaction that is already a fee bump');
+    }
 
-    const account = await this.server.loadAccount(this.getPublicKey());
-    const asset = new Asset(assetCode, issuerPublicKey);
+    // 2. Build the "Fee Bump" Wrapper
+    // This allows the "feeSource" (Server) to pay, while preserving the "innerTx" (User's action)
+    const feeBumpTx = TransactionBuilder.buildFeeBumpTransaction(
+      this.keypair,           // The Sponsor (Server) pays the fee
+      innerTx as Transaction, // The User's original transaction
+      '10000',                // Willing to pay up to 0.001 XLM (generous fee to ensure speed)
+      Networks.TESTNET
+    );
 
-    const tx = new TransactionBuilder(account, {
-      fee: '100',
-      networkPassphrase: Networks.TESTNET
-    })
-      .addOperation(Operation.payment({
-        destination: destination,
-        asset: asset,
-        amount: amount
-      }))
-      fee: "100",
-      networkPassphrase: Networks.TESTNET,
-    })
-      .addOperation(
-        Operation.changeTrust({
-          asset: asset,
-          limit: limit,
-        }),
-      )
-      .setTimeout(30)
-      .build();
+    // 3. Sign the Wrapper
+    // The inner TX is already signed by the User. We only sign the "Bump".
+    feeBumpTx.sign(this.keypair);
 
-    tx.sign(this.keypair);
-
+    // 4. Submit
     try {
-      const result = await this.server.submitTransaction(tx);
-      console.log(`Payment Sent! TX: ${result.hash}`);
+      const result = await this.server.submitTransaction(feeBumpTx);
+      console.log(`✅ Sponsored Transaction Sent! Outer TX: ${result.hash}`);
       return result.hash;
     } catch (error: any) {
-      console.error('❌ Payment Failed:', error.response?.data?.extras?.result_codes || error.message);
-      throw new Error('Payment failed');
-    }
-  }
-
-      console.log(`✅ Trustline created! TX: ${result.hash}`);
-      return result.hash;
-    } catch (error: any) {
-      console.error(
-        "❌ Change Trust failed:",
-        error.response?.data?.extras?.result_codes || error.message,
-      );
-      throw new Error("Failed to change trust.");
+      console.error('❌ Sponsorship Failed:', error.response?.data?.extras?.result_codes || error.message);
+      throw new Error('Failed to sponsor transaction');
     }
   }
 }
