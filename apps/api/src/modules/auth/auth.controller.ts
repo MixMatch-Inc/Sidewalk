@@ -2,37 +2,10 @@ import { NextFunction, Request, Response } from 'express';
 import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 import { AppError } from '../../core/errors/app-error';
 import { createInitialSession, rotateRefreshToken } from './auth.tokens';
-import { RefreshTokenDTO } from './auth.schemas';
+import { RefreshTokenDTO, RequestOtpDTO, VerifyOtpDTO } from './auth.schemas';
 import { Role } from './auth.types';
-
-const COOKIE_NAME = 'refresh_token';
-const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
-
-const parseCookies = (cookieHeader?: string): Record<string, string> => {
-  if (!cookieHeader) {
-    return {};
-  }
-
-  return cookieHeader.split(';').reduce<Record<string, string>>((acc, part) => {
-    const [rawName, ...rest] = part.trim().split('=');
-    if (!rawName || rest.length === 0) {
-      return acc;
-    }
-
-    acc[rawName] = decodeURIComponent(rest.join('='));
-    return acc;
-  }, {});
-};
-
-const setRefreshCookie = (res: Response, refreshToken: string) => {
-  res.cookie(COOKIE_NAME, refreshToken, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
-    maxAge: REFRESH_COOKIE_MAX_AGE_MS,
-    path: '/api/auth/refresh',
-  });
-};
+import { parseCookies, setRefreshCookie, COOKIE_NAME } from './auth.session';
+import { requestOtp, verifyOtpAndCreateSession } from './otp.service';
 
 export const refreshSession = async (
   req: Request,
@@ -74,6 +47,58 @@ export const refreshSession = async (
       return res.status(401).json({ error: 'unauthorized' });
     }
 
+    return next(error);
+  }
+};
+
+export const requestOtpController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { email } = req.body as RequestOtpDTO;
+    const result = await requestOtp(email);
+    return res.status(200).json({
+      success: true,
+      expiresInSeconds: result.expiresInSeconds,
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const verifyOtpController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { email, code, deviceId, clientType, role, district } = req.body as VerifyOtpDTO;
+    const session = await verifyOtpAndCreateSession({
+      email,
+      code,
+      deviceId,
+      clientType,
+      role,
+      district,
+    });
+
+    if (session.clientType === 'web') {
+      setRefreshCookie(res, session.refreshToken);
+      return res.status(200).json({
+        accessToken: session.accessToken,
+        expiresIn: '15m',
+      });
+    }
+
+    return res.status(200).json({
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken,
+      refreshTokenExpiresAt: session.refreshExpiresAt.toISOString(),
+      expiresIn: '15m',
+    });
+  } catch (error) {
     return next(error);
   }
 };

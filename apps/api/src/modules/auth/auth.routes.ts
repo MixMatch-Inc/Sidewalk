@@ -1,10 +1,23 @@
 import { Router } from 'express';
 import { validateRequest } from '../../core/validation/validate-request';
-import { issueDevSession, refreshSession } from './auth.controller';
-import { refreshTokenBodySchema } from './auth.schemas';
+import {
+  issueDevSession,
+  refreshSession,
+  requestOtpController,
+  verifyOtpController,
+} from './auth.controller';
+import {
+  refreshTokenBodySchema,
+  requestOtpBodySchema,
+  verifyOtpBodySchema,
+} from './auth.schemas';
 import { z } from 'zod';
 
 const router: Router = Router();
+
+router.post('/request-otp', validateRequest({ body: requestOtpBodySchema }), requestOtpController);
+
+router.post('/verify-otp', validateRequest({ body: verifyOtpBodySchema }), verifyOtpController);
 
 router.post('/refresh', validateRequest({ body: refreshTokenBodySchema }), refreshSession);
 
