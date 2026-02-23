@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db";
-import { getHealth } from "./modules/health/health.controller";
+import { getLiveness, getReadiness } from "./modules/health/health.controller";
 import { stellarService } from "./config/stellar";
 import reportsRoutes from "./modules/reports/reports.routes";
 import authRoutes from "./modules/auth/auth.routes";
@@ -19,12 +19,15 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.set("trust proxy", 1);
+
+// Root level health checks
+app.get("/live", getLiveness);
+app.get("/ready", getReadiness);
+
 app.use(cors());
 app.use(express.json());
 app.use(requestLogger);
 app.use("/api", tieredApiRateLimiter);
-
-app.get("/api/health", getHealth);
 app.use("/api/auth", authRoutes);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/media", mediaRoutes);
