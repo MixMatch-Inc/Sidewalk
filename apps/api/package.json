@@ -10,7 +10,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:integration": "cross-env STELLAR_SECRET_KEY=SDKBDNGEOYL66LGFJCJSSPEP52XAGONWJDAT5WL5PF262I2LJYAJGWHU tsx --test src/**/*.integration.test.ts",
-    "test:health": "cross-env STELLAR_SECRET_KEY=SDKBDNGEOYL66LGFJCJSSPEP52XAGONWJDAT5WL5PF262I2LJYAJGWHU tsx --test src/modules/health/**/*.test.ts"
+    "test:health": "cross-env STELLAR_SECRET_KEY=SDKBDNGEOYL66LGFJCJSSPEP52XAGONWJDAT5WL5PF262I2LJYAJGWHU tsx --test src/modules/health/**/*.test.ts",
+    "db:migrate": "tsx src/scripts/db-migrate.ts",
+    "db:seed": "tsx src/scripts/db-seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.995.0",

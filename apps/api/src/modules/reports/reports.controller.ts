@@ -5,6 +5,7 @@ import { AppError } from '../../core/errors/app-error';
 import { logger } from '../../core/logging/logger';
 import { MediaUploadModel } from '../media/media-upload.model';
 import { ReportModel } from './report.model';
+import { buildDeterministicSnapshot, hashSnapshot } from './reports.snapshot';
 import {
   CreateReportDTO,
   ReportsMapQueryDTO,
@@ -12,6 +13,24 @@ import {
   VerifyReportDTO,
   VerifyStatusDTO,
 } from './reports.schemas';
+
+const haversineMeters = (
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number,
+): number => {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusMeters = 6_371_000;
+  const dLat = toRad(toLat - fromLat);
+  const dLng = toRad(toLng - fromLng);
+
+  const value =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(fromLat)) * Math.cos(toRad(toLat)) * Math.sin(dLng / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+};
 
 export const createReport = async (
   req: Request,
@@ -22,7 +41,8 @@ export const createReport = async (
     const { title, description, category, location, media_urls } =
       req.body as CreateReportDTO;
 
-    const firstMediaUrl = media_urls[0];
+    const mediaUrls = media_urls ?? [];
+    const firstMediaUrl = mediaUrls[0];
     const mediaUpload = firstMediaUrl
       ? await MediaUploadModel.findOne({ url: firstMediaUrl }).lean()
       : null;
@@ -36,51 +56,43 @@ export const createReport = async (
       const [reportLng, reportLat] = location.coordinates;
       const exifLat = mediaUpload.exif_gps.latitude;
       const exifLng = mediaUpload.exif_gps.longitude;
-
-      const toRad = (value: number) => (value * Math.PI) / 180;
-      const earthRadiusMeters = 6_371_000;
-      const dLat = toRad(exifLat - reportLat);
-      const dLng = toRad(exifLng - reportLng);
-      const lat1 = toRad(reportLat);
-      const lat2 = toRad(exifLat);
-
-      const haversine =
-        Math.sin(dLat / 2) ** 2 +
-        Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-      exifDistanceMeters =
-        2 * earthRadiusMeters * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+      exifDistanceMeters = haversineMeters(reportLat, reportLng, exifLat, exifLng);
 
       if (exifDistanceMeters > 500) {
         integrityFlag = 'SUSPICIOUS';
       }
     }
 
+    const snapshotPayload = {
+      title,
+      description,
+      category,
+      location,
+      media_urls: mediaUrls,
+      userId: req.user?.id ?? null,
+    };
+    const snapshot = buildDeterministicSnapshot(snapshotPayload);
+    const contentHash = hashSnapshot(snapshot);
+
     const report = await ReportModel.create({
       title,
       description,
       category,
       location,
-      media_urls,
+      media_urls: mediaUrls,
       stellar_tx_hash: null,
+      snapshot_hash: contentHash,
       exif_verified: exifVerified,
       exif_distance_meters: exifDistanceMeters,
       integrity_flag: integrityFlag,
     });
 
-    const contentHash = crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify({ title, description, category, location, media_urls }),
-        'utf8',
-      )
-      .digest('hex');
     const txHash = await stellarService.anchorHash(contentHash);
-
     await ReportModel.updateOne({ _id: report._id }, { $set: { stellar_tx_hash: txHash } });
 
     return res.status(201).json({
       message: 'Report created and anchored',
-      report_id: report._id,
+      report_id: String(report._id),
       content_hash: contentHash,
       stellar_tx: txHash,
       exif_verified: exifVerified,

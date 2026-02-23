@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const trimmed = (label: string) =>
   z
@@ -10,18 +10,21 @@ const trimmed = (label: string) =>
     .min(1, `${label} is required`);
 
 export const createReportBodySchema = z.object({
-  title: trimmed("title"),
-  description: trimmed("description"),
+  title: trimmed('title'),
+  description: trimmed('description'),
   category: z.enum([
-    "INFRASTRUCTURE",
-    "SANITATION",
-    "SAFETY",
-    "LIGHTING",
-    "TRANSPORT",
-    "DRAINAGE",
+    'INFRASTRUCTURE',
+    'SANITATION',
+    'SAFETY',
+    'LIGHTING',
+    'TRANSPORT',
+    'DRAINAGE',
+    'UTILITIES',
+    'TRAFFIC',
+    'OTHER',
   ]),
   location: z.object({
-    type: z.literal("Point"),
+    type: z.literal('Point'),
     coordinates: z
       .tuple([z.number(), z.number()])
       .refine(
@@ -32,35 +35,35 @@ export const createReportBodySchema = z.object({
           lng <= 180 &&
           lat >= -90 &&
           lat <= 90,
-        "location.coordinates must be valid and ordered [longitude, latitude]",
+        'location.coordinates must be valid and ordered [longitude, latitude]',
       ),
   }),
-  media_urls: z.array(z.string().url("media_urls must contain valid URLs")).default([]),
+  media_urls: z.array(z.string().url('media_urls must contain valid URLs')).default([]),
 });
 
 export const verifyReportBodySchema = z.object({
-  txHash: trimmed("txHash"),
-  originalDescription: trimmed("originalDescription"),
+  txHash: trimmed('txHash'),
+  originalDescription: trimmed('originalDescription'),
 });
 
 export const updateReportStatusBodySchema = z.object({
-  originalTxHash: trimmed("originalTxHash"),
-  status: trimmed("status"),
+  originalTxHash: trimmed('originalTxHash'),
+  status: trimmed('status'),
   evidence: z
     .string({
-      invalid_type_error: "evidence must be a string",
+      invalid_type_error: 'evidence must be a string',
     })
     .trim()
     .optional(),
 });
 
 export const verifyStatusBodySchema = z.object({
-  statusTxHash: trimmed("statusTxHash"),
-  originalTxHash: trimmed("originalTxHash"),
-  status: trimmed("status"),
+  statusTxHash: trimmed('statusTxHash'),
+  originalTxHash: trimmed('originalTxHash'),
+  status: trimmed('status'),
   evidence: z
     .string({
-      invalid_type_error: "evidence must be a string",
+      invalid_type_error: 'evidence must be a string',
     })
     .trim()
     .optional(),
