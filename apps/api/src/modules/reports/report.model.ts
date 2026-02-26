@@ -26,6 +26,7 @@ export type ReportLocation = {
 };
 
 export interface Report {
+  reporter_user_id: string | null;
   title: string;
   description: string;
   status: ReportStatus;
@@ -48,6 +49,11 @@ const isValidLatitude = (value: number) =>
 
 const reportSchema = new Schema<Report>(
   {
+    reporter_user_id: {
+      type: String,
+      default: null,
+      index: true,
+    },
     title: {
       type: String,
       required: true,

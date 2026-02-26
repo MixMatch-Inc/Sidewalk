@@ -56,6 +56,7 @@ export const createReport = async (
     }
 
     const report = await ReportModel.create({
+      reporter_user_id: req.user?.id ?? null,
       title,
       description,
       category,

@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   GetObjectCommand,
   PutObjectCommand,
@@ -128,5 +129,19 @@ export const compressAndReplaceImage = async (objectKey: string): Promise<void> 
       Body: optimizedBuffer,
       ContentType: 'image/webp',
     }),
+  );
+};
+
+export const generatePresignedGetObjectUrl = async (
+  objectKey: string,
+  expiresInSeconds = 900,
+): Promise<string> => {
+  return getSignedUrl(
+    client as never,
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: objectKey,
+    }) as never,
+    { expiresIn: expiresInSeconds },
   );
 };
