@@ -7,6 +7,7 @@
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "worker:media": "tsx src/scripts/media-worker.ts",
+    "worker:stellar-anchor": "tsx src/scripts/stellar-anchor-worker.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:integration": "tsx --test src/**/*.integration.test.ts"

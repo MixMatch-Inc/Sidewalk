@@ -5,6 +5,7 @@ import { AppError } from '../../core/errors/app-error';
 import { logger } from '../../core/logging/logger';
 import { MediaUploadModel } from '../media/media-upload.model';
 import { ReportModel } from './report.model';
+import { enqueueStellarAnchor } from './reports.anchor.queue';
 import {
   CreateReportDTO,
   ReportsMapQueryDTO,
@@ -55,8 +56,20 @@ export const createReport = async (
       }
     }
 
+    const contentHash = crypto
+      .createHash('sha256')
+      .update(
+        JSON.stringify({ title, description, category, location, media_urls }),
+        'utf8',
+      )
+      .digest('hex');
+
     const report = await ReportModel.create({
       reporter_user_id: req.user?.id ?? null,
+      data_hash: contentHash,
+      anchor_status: 'PENDING_ANCHOR',
+      anchor_attempts: 0,
+      anchor_last_error: null,
       title,
       description,
       category,
@@ -68,26 +81,21 @@ export const createReport = async (
       integrity_flag: integrityFlag,
     });
 
-    const contentHash = crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify({ title, description, category, location, media_urls }),
-        'utf8',
-      )
-      .digest('hex');
-    const txHash = await stellarService.anchorHash(contentHash);
+    await enqueueStellarAnchor({
+      reportId: String(report._id),
+      dataHash: contentHash,
+    });
 
-    await ReportModel.updateOne({ _id: report._id }, { $set: { stellar_tx_hash: txHash } });
-
-    return res.status(201).json({
-      message: 'Report created and anchored',
+    return res.status(202).json({
+      message: 'Report accepted; anchoring queued',
       report_id: report._id,
       content_hash: contentHash,
-      stellar_tx: txHash,
+      stellar_tx: null,
+      anchor_status: 'PENDING_ANCHOR',
       exif_verified: exifVerified,
       exif_distance_meters: exifDistanceMeters,
       integrity_flag: integrityFlag,
-      explorer_url: stellarService.getExplorerUrl(txHash),
+      explorer_url: null,
     });
   } catch (error) {
     return next(error);

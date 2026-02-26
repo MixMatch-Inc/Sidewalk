@@ -8,6 +8,7 @@ import reportsRoutes from "./modules/reports/reports.routes";
 import authRoutes from "./modules/auth/auth.routes";
 import mediaRoutes from "./modules/media/media.routes";
 import { startMediaProcessingWorker } from "./modules/media/media.queue";
+import { startStellarAnchorWorker } from "./modules/reports/reports.anchor.queue";
 import { logger } from "./core/logging/logger";
 import { requestLogger } from "./core/logging/request-logger.middleware";
 import { errorHandler, notFoundHandler } from "./core/errors/error-handler";
@@ -41,6 +42,11 @@ const startServer = async () => {
     if (process.env.ENABLE_MEDIA_WORKER !== "false") {
       startMediaProcessingWorker();
       logger.info("Media processing worker initialized");
+    }
+
+    if (process.env.ENABLE_STELLAR_ANCHOR_WORKER !== "false") {
+      startStellarAnchorWorker();
+      logger.info("Stellar anchor worker initialized");
     }
 
     app.listen(PORT, () => {
