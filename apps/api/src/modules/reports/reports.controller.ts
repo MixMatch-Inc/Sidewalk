@@ -6,8 +6,11 @@ import { logger } from '../../core/logging/logger';
 import { MediaUploadModel } from '../media/media-upload.model';
 import { ReportModel } from './report.model';
 import { enqueueStellarAnchor } from './reports.anchor.queue';
+import { StatusUpdateModel } from './status-update.model';
 import {
   CreateReportDTO,
+  ReportDetailParamsDTO,
+  ReportListQueryDTO,
   ReportsMapQueryDTO,
   UpdateReportStatusDTO,
   VerifyReportDTO,
@@ -293,6 +296,135 @@ export const getMapReports = async (
         status: pin.status,
         category: pin.category,
       })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getReportList = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const query = req.query as unknown as ReportListQueryDTO;
+    const filter: Record<string, unknown> = {};
+
+    if (query.status) {
+      filter.status = query.status;
+    }
+
+    if (query.category) {
+      filter.category = query.category;
+    }
+
+    if (query.mine && req.user?.id) {
+      filter.reporter_user_id = req.user.id;
+    }
+
+    const page = query.page;
+    const pageSize = query.pageSize;
+
+    const [reports, total] = await Promise.all([
+      ReportModel.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean()
+        .exec(),
+      ReportModel.countDocuments(filter),
+    ]);
+    const typedReports = reports as Array<{
+      _id: unknown;
+      title: string;
+      category: string;
+      status: string;
+      anchor_status: string;
+      integrity_flag: string;
+      location: { type: 'Point'; coordinates: [number, number] };
+      createdAt?: Date;
+    }>;
+
+    return res.status(200).json({
+      page,
+      pageSize,
+      total,
+      data: typedReports.map((report) => ({
+        id: String(report._id),
+        title: report.title,
+        category: report.category,
+        status: report.status,
+        anchor_status: report.anchor_status,
+        integrity_flag: report.integrity_flag,
+        created_at: report.createdAt ?? null,
+        location: report.location,
+      })),
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const getReportDetail = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { reportId } = req.params as unknown as ReportDetailParamsDTO;
+
+    const report = await ReportModel.findById(reportId).lean();
+    if (!report) {
+      throw new AppError('Report not found', 404, 'REPORT_NOT_FOUND');
+    }
+    const typedReport = report as typeof report & {
+      createdAt?: Date;
+      updatedAt?: Date;
+    };
+
+    const statusUpdates = await StatusUpdateModel.find({ reportId: report._id })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    const typedStatusUpdates = statusUpdates as Array<{
+      nextStatus: string;
+      note?: string | null;
+      createdAt?: Date;
+    }>;
+
+    return res.status(200).json({
+      id: String(report._id),
+      title: report.title,
+      description: report.description,
+      category: report.category,
+      status: report.status,
+      anchor_status: report.anchor_status,
+      anchor_attempts: report.anchor_attempts,
+      anchor_last_error: report.anchor_last_error,
+      integrity_flag: report.integrity_flag,
+      exif_verified: report.exif_verified,
+      exif_distance_meters: report.exif_distance_meters,
+      stellar_tx_hash: report.stellar_tx_hash,
+      snapshot_hash: report.snapshot_hash,
+      created_at: typedReport.createdAt ?? null,
+      updated_at: typedReport.updatedAt ?? null,
+      location: report.location,
+      media_urls: report.media_urls,
+      history: [
+        {
+          type: 'CREATED',
+          status: 'PENDING',
+          note: 'Report submitted',
+          createdAt: typedReport.createdAt ?? null,
+        },
+        ...typedStatusUpdates.map((update) => ({
+          type: 'STATUS_UPDATE',
+          status: update.nextStatus,
+          note: update.note ?? null,
+          createdAt: update.createdAt ?? null,
+        })),
+      ],
     });
   } catch (error) {
     return next(error);
