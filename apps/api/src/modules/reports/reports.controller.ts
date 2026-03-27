@@ -6,8 +6,10 @@ import { logger } from '../../core/logging/logger';
 import { MediaUploadModel } from '../media/media-upload.model';
 import { ReportModel } from './report.model';
 import { enqueueStellarAnchor } from './reports.anchor.queue';
+import { buildDeterministicSnapshot, hashSnapshot } from './reports.snapshot';
 import {
   CreateReportDTO,
+  MyReportsQueryDTO,
   ReportsMapQueryDTO,
   UpdateReportStatusDTO,
   VerifyReportDTO,
@@ -63,13 +65,14 @@ export const createReport = async (
       }
     }
 
-    const contentHash = crypto
-      .createHash('sha256')
-      .update(
-        JSON.stringify({ title, description, category, location, media_urls: mediaUrls }),
-        'utf8',
-      )
-      .digest('hex');
+    const snapshot = buildDeterministicSnapshot({
+      title,
+      description,
+      category,
+      location,
+      media_urls: mediaUrls,
+    });
+    const contentHash = hashSnapshot(snapshot);
 
     const report = await ReportModel.create({
       reporter_user_id: req.user?.id ?? null,
@@ -145,12 +148,11 @@ export const verifyReport = async (
   next: NextFunction,
 ) => {
   try {
-    const { txHash, originalDescription } = req.body as VerifyReportDTO;
+    const { txHash, originalDescription, report } = req.body as VerifyReportDTO;
 
-    const expectedHash = crypto
-      .createHash('sha256')
-      .update(originalDescription, 'utf8')
-      .digest('hex');
+    const expectedHash = report
+      ? hashSnapshot(buildDeterministicSnapshot(report))
+      : crypto.createHash('sha256').update(originalDescription ?? '', 'utf8').digest('hex');
     const result = await stellarService.verifyTransaction(txHash, expectedHash);
 
     if (!result.valid) {
@@ -177,6 +179,58 @@ export const verifyReport = async (
     return next(
       new AppError('Transaction not found', 404, 'TRANSACTION_NOT_FOUND'),
     );
+  }
+};
+
+export const getMyReports = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { page, pageSize } = req.query as unknown as MyReportsQueryDTO;
+    const reporterId = req.user?.id;
+
+    if (!reporterId) {
+      throw new AppError('Unauthorized', 401, 'UNAUTHORIZED');
+    }
+
+    const [reports, total] = await Promise.all([
+      ReportModel.find({ reporter_user_id: reporterId })
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
+        .lean(),
+      ReportModel.countDocuments({ reporter_user_id: reporterId }),
+    ]);
+
+    return res.status(200).json({
+      data: reports.map((report) => {
+        const withTimestamps = report as typeof report & {
+          createdAt?: Date;
+          updatedAt?: Date;
+        };
+
+        return {
+          id: String(report._id),
+          title: report.title,
+          category: report.category,
+          status: report.status,
+          anchorStatus: report.anchor_status,
+          integrityFlag: report.integrity_flag,
+          createdAt: withTimestamps.createdAt?.toISOString() ?? null,
+          updatedAt: withTimestamps.updatedAt?.toISOString() ?? null,
+        };
+      }),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    });
+  } catch (error) {
+    return next(error);
   }
 };
 
