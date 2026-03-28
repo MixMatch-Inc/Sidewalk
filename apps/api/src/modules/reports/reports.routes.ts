@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import {
   createReport,
+  getReportDetail,
+  getReportList,
   getMapReports,
   getMyReports,
   verifyReport,
@@ -20,6 +22,22 @@ import {
 } from './reports.schemas';
 
 const router: Router = Router();
+
+router.get(
+  '/',
+  authenticateToken,
+  requireRole(['CITIZEN', 'AGENCY_ADMIN']),
+  validateRequest({ query: reportListQuerySchema }),
+  getReportList,
+);
+
+router.get(
+  '/:reportId',
+  authenticateToken,
+  requireRole(['CITIZEN', 'AGENCY_ADMIN']),
+  validateRequest({ params: reportDetailParamsSchema }),
+  getReportDetail,
+);
 
 router.get(
   '/map',

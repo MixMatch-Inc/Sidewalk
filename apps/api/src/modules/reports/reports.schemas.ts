@@ -134,9 +134,50 @@ const boundsQuerySchema = z
 
 export const reportsMapQuerySchema = z.union([radiusQuerySchema, boundsQuerySchema]);
 
+const optionalTrimmed = () =>
+  z
+    .string({
+      invalid_type_error: 'value must be a string',
+    })
+    .trim()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined));
+
+const positiveInt = (field: string, fallback: number) =>
+  z
+    .string({
+      invalid_type_error: `${field} must be a number`,
+    })
+    .trim()
+    .optional()
+    .transform((value) => {
+      if (!value) {
+        return fallback;
+      }
+
+      return Number(value);
+    })
+    .refine((value) => Number.isInteger(value) && value > 0, `${field} must be a positive integer`);
+
+export const reportListQuerySchema = z.object({
+  page: positiveInt('page', 1),
+  pageSize: positiveInt('pageSize', 20).refine((value) => value <= 100, 'pageSize must be <= 100'),
+  status: optionalTrimmed(),
+  category: optionalTrimmed(),
+  mine: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((value) => value === 'true'),
+});
+
+export const reportDetailParamsSchema = z.object({
+  reportId: trimmed('reportId'),
+});
+
 export type CreateReportDTO = z.infer<typeof createReportBodySchema>;
 export type VerifyReportDTO = z.infer<typeof verifyReportBodySchema>;
 export type UpdateReportStatusDTO = z.infer<typeof updateReportStatusBodySchema>;
 export type VerifyStatusDTO = z.infer<typeof verifyStatusBodySchema>;
 export type ReportsMapQueryDTO = z.infer<typeof reportsMapQuerySchema>;
-export type MyReportsQueryDTO = z.infer<typeof myReportsQuerySchema>;
+export type ReportListQueryDTO = z.infer<typeof reportListQuerySchema>;
+export type ReportDetailParamsDTO = z.infer<typeof reportDetailParamsSchema>;
