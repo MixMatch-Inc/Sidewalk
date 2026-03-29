@@ -23,6 +23,7 @@ lerna-debug.log*
 dist/
 build/
 out/
+.next/
 coverage/
 *.tsbuildinfo
 

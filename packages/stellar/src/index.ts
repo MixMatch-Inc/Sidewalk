@@ -10,6 +10,31 @@ import {
   FeeBumpTransaction
 } from "@stellar/stellar-sdk";
 
+type HorizonLikeError = {
+  message?: string;
+  response?: {
+    status?: number;
+    data?: {
+      extras?: {
+        result_codes?: unknown;
+      };
+    };
+  };
+};
+
+type BalanceLike = {
+  asset_code?: string;
+  asset_issuer?: string;
+};
+
+const getErrorDetails = (error: unknown): HorizonLikeError => {
+  if (typeof error === "object" && error !== null) {
+    return error as HorizonLikeError;
+  }
+
+  return {};
+};
+
 export class StellarService {
   private server: Horizon.Server;
   private keypair: Keypair;
@@ -18,7 +43,7 @@ export class StellarService {
     this.server = new Horizon.Server("https://horizon-testnet.stellar.org");
     try {
       this.keypair = Keypair.fromSecret(secretKey);
-    } catch (error) {
+    } catch {
       throw new Error("Invalid Stellar Secret Key provided.");
     }
   }
@@ -38,8 +63,10 @@ export class StellarService {
     try {
       await this.server.loadAccount(publicKey);
       console.log("✅ Account is active and funded.");
-    } catch (e: any) {
-      if (e.response?.status === 404) {
+    } catch (error) {
+      const details = getErrorDetails(error);
+
+      if (details.response?.status === 404) {
         console.log("⚠️ Account not found. Asking Friendbot to fund it...");
         try {
           await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
@@ -48,7 +75,7 @@ export class StellarService {
           console.error("❌ Failed to fund account:", fundError);
         }
       } else {
-        console.error("❌ Error checking account:", e.message);
+        console.error("❌ Error checking account:", details.message);
       }
     }
   }
@@ -57,7 +84,7 @@ export class StellarService {
     try {
       await this.server.fetchTimebounds(10);
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -86,10 +113,11 @@ export class StellarService {
       const result = await this.server.submitTransaction(tx);
       console.log(`✅ Hash anchored! TX: ${result.hash}`);
       return result.hash;
-    } catch (error: any) {
+    } catch (error) {
+      const details = getErrorDetails(error);
       console.error(
         "❌ Anchoring failed:",
-        error.response?.data?.extras?.result_codes || error.message,
+        details.response?.data?.extras?.result_codes || details.message,
       );
       throw new Error("Failed to anchor hash on Stellar.");
     }
@@ -117,8 +145,9 @@ export class StellarService {
         timestamp: timestamp,
         sender: tx.source_account
       };
-    } catch (error: any) {
-      console.error('❌ Verification failed:', error.message);
+    } catch (error) {
+      const details = getErrorDetails(error);
+      console.error('❌ Verification failed:', details.message);
       throw new Error('Transaction not found or network error');
     }
   }
@@ -144,10 +173,14 @@ export class StellarService {
   async checkTrustline(userPublicKey: string, assetCode: string, issuerPublicKey: string): Promise<boolean> {
     try {
       const account = await this.server.loadAccount(userPublicKey);
-      return account.balances.some((balance: any) => 
-        balance.asset_code === assetCode && balance.asset_issuer === issuerPublicKey
-      );
-    } catch (error) {
+      return account.balances.some((balance) => {
+        const typedBalance = balance as BalanceLike;
+        return (
+          typedBalance.asset_code === assetCode &&
+          typedBalance.asset_issuer === issuerPublicKey
+        );
+      });
+    } catch {
       return false;
     }
   }
@@ -175,7 +208,7 @@ export class StellarService {
     let innerTx: Transaction | FeeBumpTransaction;
     try {
       innerTx = TransactionBuilder.fromXDR(userTxXDR, Networks.TESTNET);
-    } catch (e) {
+    } catch {
       throw new Error('Invalid Transaction XDR provided');
     }
 
@@ -194,8 +227,12 @@ export class StellarService {
     try {
       const result = await this.server.submitTransaction(feeBumpTx);
       return result.hash;
-    } catch (error: any) {
-      console.error('❌ Sponsorship Failed:', error.response?.data?.extras?.result_codes || error.message);
+    } catch (error) {
+      const details = getErrorDetails(error);
+      console.error(
+        '❌ Sponsorship Failed:',
+        details.response?.data?.extras?.result_codes || details.message,
+      );
       throw new Error('Failed to sponsor transaction');
     }
   }
