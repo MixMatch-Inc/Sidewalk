@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { REPORT_CATEGORIES, REPORT_STATUSES } from './report.model';
 
 const trimmed = (label: string) =>
   z
@@ -59,7 +60,7 @@ export const myReportsQuerySchema = z.object({
 
 export const updateReportStatusBodySchema = z.object({
   originalTxHash: trimmed('originalTxHash'),
-  status: trimmed('status'),
+  status: z.enum(REPORT_STATUSES),
   evidence: z
     .string({
       invalid_type_error: 'evidence must be a string',
@@ -71,7 +72,7 @@ export const updateReportStatusBodySchema = z.object({
 export const verifyStatusBodySchema = z.object({
   statusTxHash: trimmed('statusTxHash'),
   originalTxHash: trimmed('originalTxHash'),
-  status: trimmed('status'),
+  status: z.enum(REPORT_STATUSES),
   evidence: z
     .string({
       invalid_type_error: 'evidence must be a string',
@@ -183,5 +184,4 @@ export type VerifyReportDTO = z.infer<typeof verifyReportBodySchema>;
 export type UpdateReportStatusDTO = z.infer<typeof updateReportStatusBodySchema>;
 export type VerifyStatusDTO = z.infer<typeof verifyStatusBodySchema>;
 export type ReportsMapQueryDTO = z.infer<typeof reportsMapQuerySchema>;
-export type ReportListQueryDTO = z.infer<typeof reportListQuerySchema>;
-export type ReportDetailParamsDTO = z.infer<typeof reportDetailParamsSchema>;
+export type ListReportsQueryDTO = z.infer<typeof listReportsQuerySchema>;
