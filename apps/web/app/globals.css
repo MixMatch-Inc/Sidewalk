@@ -178,7 +178,8 @@ a {
 }
 
 .field input,
-.field select {
+.field select,
+.input-area {
   min-height: 3rem;
   border-radius: 14px;
   border: 1px solid var(--border);
@@ -235,6 +236,77 @@ a {
   flex-wrap: wrap;
 }
 
+.filter-row {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.report-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.two-column-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-grid {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+}
+
+.detail-list {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+}
+
+.detail-list dt {
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.3rem;
+  text-transform: uppercase;
+}
+
+.detail-list dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.compact-copy {
+  max-width: none;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.timeline-list,
+.link-list {
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+}
+
+.timeline-list li + li,
+.link-list li + li {
+  margin-top: 0.75rem;
+}
+
+.timeline-list p {
+  margin: 0.3rem 0;
+}
+
 .health-card dl {
   margin: 0;
   display: grid;
@@ -262,5 +334,11 @@ a {
 
   .hero {
     padding: 2rem;
+  }
+
+  .two-column-grid,
+  .detail-grid,
+  .report-grid {
+    grid-template-columns: 1fr;
   }
 }

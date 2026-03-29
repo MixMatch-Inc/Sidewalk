@@ -4,10 +4,12 @@ import { NextFunction, Request, Response } from 'express';
 import * as exifr from 'exifr';
 import { AppError } from '../../core/errors/app-error';
 import { buildObjectKey, uploadStreamToS3 } from './media.s3';
+import { MediaDraftModel } from './media-draft.model';
 import { MediaUploadModel } from './media-upload.model';
 import { enqueueMediaProcessing } from './media.queue';
 
 const MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024;
+const UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 
 type AllowedMime = 'image/jpeg' | 'image/png' | 'image/webp';
 
@@ -96,6 +98,19 @@ class ExifProbeCollector extends Transform {
 
 export const uploadMedia = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const requester = req.user;
+    if (!requester) {
+      return next(new AppError('Unauthorized', 401, 'UNAUTHORIZED'));
+    }
+
+    let draftId = req.header('x-media-draft-id')?.trim() || null;
+    if (draftId) {
+      const draft = await MediaDraftModel.findById(draftId).lean();
+      if (!draft || draft.status !== 'OPEN' || draft.owner_user_id !== requester.id) {
+        return next(new AppError('Invalid media draft', 400, 'INVALID_MEDIA_DRAFT'));
+      }
+    }
+
     const contentType = req.headers['content-type'] ?? '';
     if (!contentType.includes('multipart/form-data')) {
       return next(new AppError('Expected multipart/form-data', 400, 'INVALID_CONTENT_TYPE'));
@@ -112,6 +127,12 @@ export const uploadMedia = async (req: Request, res: Response, next: NextFunctio
     let uploadPromise: Promise<{ key: string; url: string }> | null = null;
     let receivedFile = false;
     let fileTooLarge = false;
+
+    busboy.on('field', (fieldname: string, value: string) => {
+      if (fieldname === 'draftId' && !draftId) {
+        draftId = value.trim() || null;
+      }
+    });
 
     busboy.on('file', (_fieldname: string, file: NodeJS.ReadableStream) => {
       if (receivedFile) {
@@ -174,6 +195,10 @@ export const uploadMedia = async (req: Request, res: Response, next: NextFunctio
                   $set: {
                     key: uploaded.key,
                     url: uploaded.url,
+                    owner_user_id: requester.id,
+                    draft_id: draftId,
+                    attached_report_id: null,
+                    expires_at: new Date(Date.now() + UPLOAD_TTL_MS),
                     mime,
                     exif_gps: exifGps,
                     exif_verified: Boolean(exifGps),

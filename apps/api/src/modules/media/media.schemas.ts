@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const createMediaDraftBodySchema = z.object({});
+
 export const secureMediaParamsSchema = z.object({
   fileId: z
     .string({
@@ -11,3 +13,4 @@ export const secureMediaParamsSchema = z.object({
 });
 
 export type SecureMediaParamsDTO = z.infer<typeof secureMediaParamsSchema>;
+export type CreateMediaDraftBodyDTO = z.infer<typeof createMediaDraftBodySchema>;

@@ -1,11 +1,19 @@
 import { Router } from 'express';
 import { authenticateToken, requireRole } from '../auth/auth.middleware';
 import { uploadMedia } from './media.upload';
-import { getSecureMediaUrl } from './media.controller';
+import { createMediaDraft, getSecureMediaUrl } from './media.controller';
 import { validateRequest } from '../../core/validation/validate-request';
-import { secureMediaParamsSchema } from './media.schemas';
+import { createMediaDraftBodySchema, secureMediaParamsSchema } from './media.schemas';
 
 const router: Router = Router();
+
+router.post(
+  '/drafts',
+  authenticateToken,
+  requireRole(['CITIZEN', 'AGENCY_ADMIN']),
+  validateRequest({ body: createMediaDraftBodySchema }),
+  createMediaDraft,
+);
 
 router.post(
   '/upload',

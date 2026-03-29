@@ -16,8 +16,8 @@ export default function DashboardPage() {
           <p>Protected routes redirect back to OTP login when no access token or refresh path exists.</p>
         </article>
         <article className="surface-card">
-          <h2>Refresh bootstrap</h2>
-          <p>On load, the shell asks the API for a fresh access token using the web refresh cookie.</p>
+          <h2>Reports</h2>
+          <p>Open the reports workspace to submit new reports or inspect the authenticated list and detail flows.</p>
         </article>
         <article className="surface-card">
           <h2>Ready for expansion</h2>

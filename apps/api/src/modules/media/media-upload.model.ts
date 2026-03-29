@@ -3,6 +3,10 @@ import { Schema, model, type HydratedDocument } from 'mongoose';
 export interface MediaUpload {
   key: string;
   url: string;
+  owner_user_id: string | null;
+  draft_id: string | null;
+  attached_report_id: string | null;
+  expires_at: Date | null;
   mime: 'image/jpeg' | 'image/png' | 'image/webp';
   exif_gps: {
     latitude: number;
@@ -19,6 +23,10 @@ const mediaUploadSchema = new Schema<MediaUpload>(
   {
     key: { type: String, required: true, unique: true, index: true },
     url: { type: String, required: true, unique: true, index: true },
+    owner_user_id: { type: String, default: null, index: true },
+    draft_id: { type: String, default: null, index: true },
+    attached_report_id: { type: String, default: null, index: true },
+    expires_at: { type: Date, default: null, index: true },
     mime: {
       type: String,
       required: true,
