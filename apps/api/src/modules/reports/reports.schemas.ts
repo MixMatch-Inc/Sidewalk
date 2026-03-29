@@ -137,21 +137,6 @@ export const reportParamsSchema = z.object({
   reportId: z.string().trim().regex(/^[a-fA-F0-9]{24}$/, 'reportId must be a valid ObjectId'),
 });
 
-export const listReportsQuerySchema = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
-  status: z.enum(REPORT_STATUSES).optional(),
-  category: z.enum(REPORT_CATEGORIES).optional(),
-  district: z.string().trim().min(1).optional(),
-  reporterId: z.string().trim().min(1).optional(),
-  mine: z
-    .union([z.literal('true'), z.literal('false')])
-    .transform((value) => value === 'true')
-    .optional(),
-  sort: z.enum(['createdAt', 'updatedAt']).default('createdAt'),
-  order: z.enum(['asc', 'desc']).default('desc'),
-});
-
 export const reportsMapQuerySchema = z.union([radiusQuerySchema, boundsQuerySchema]);
 
 const optionalTrimmed = () =>
@@ -199,5 +184,4 @@ export type VerifyReportDTO = z.infer<typeof verifyReportBodySchema>;
 export type UpdateReportStatusDTO = z.infer<typeof updateReportStatusBodySchema>;
 export type VerifyStatusDTO = z.infer<typeof verifyStatusBodySchema>;
 export type ReportsMapQueryDTO = z.infer<typeof reportsMapQuerySchema>;
-export type ReportListQueryDTO = z.infer<typeof reportListQuerySchema>;
-export type ReportDetailParamsDTO = z.infer<typeof reportDetailParamsSchema>;
+export type ListReportsQueryDTO = z.infer<typeof listReportsQuerySchema>;

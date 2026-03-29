@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { SignOptions } from 'jsonwebtoken';
 import { AppError } from '../../core/errors/app-error';
+import { getJwtEnv } from '../../config/env';
 import { AuthenticatedUser, Role } from './auth.types';
 
 type JwtAlgorithm = 'HS256' | 'RS256';
@@ -14,9 +15,10 @@ type JwtConfig = {
 const toPem = (value: string) => value.replace(/\\n/g, '\n');
 
 export const getJwtConfig = (): JwtConfig => {
-  const privateKey = process.env.JWT_PRIVATE_KEY;
-  const publicKey = process.env.JWT_PUBLIC_KEY;
-  const secret = process.env.JWT_SECRET;
+  const env = getJwtEnv();
+  const privateKey = env.JWT_PRIVATE_KEY;
+  const publicKey = env.JWT_PUBLIC_KEY;
+  const secret = env.JWT_SECRET;
 
   if (privateKey && publicKey) {
     return {
@@ -58,13 +60,9 @@ type RefreshPayload = {
   tokenType: 'refresh';
 };
 
-const accessExpiresIn = (process.env.ACCESS_TOKEN_EXPIRES_IN ??
-  '15m') as SignOptions['expiresIn'];
-const refreshExpiresIn = (process.env.REFRESH_TOKEN_EXPIRES_IN ??
-  '30d') as SignOptions['expiresIn'];
-
 export const signAccessToken = (user: AuthenticatedUser): string => {
   const config = getJwtConfig();
+  const { ACCESS_TOKEN_EXPIRES_IN } = getJwtEnv();
   const payload: AccessPayload = {
     sub: user.id,
     role: user.role,
@@ -74,7 +72,7 @@ export const signAccessToken = (user: AuthenticatedUser): string => {
 
   return jwt.sign(payload, config.signingKey, {
     algorithm: config.algorithm,
-    expiresIn: accessExpiresIn,
+    expiresIn: ACCESS_TOKEN_EXPIRES_IN as SignOptions['expiresIn'],
   });
 };
 
@@ -85,6 +83,7 @@ export const signRefreshToken = (
   tokenId: string,
 ): string => {
   const config = getJwtConfig();
+  const { REFRESH_TOKEN_EXPIRES_IN } = getJwtEnv();
   const payload: RefreshPayload = {
     sub: user.id,
     role: user.role,
@@ -97,7 +96,7 @@ export const signRefreshToken = (
 
   return jwt.sign(payload, config.signingKey, {
     algorithm: config.algorithm,
-    expiresIn: refreshExpiresIn,
+    expiresIn: REFRESH_TOKEN_EXPIRES_IN as SignOptions['expiresIn'],
   });
 };
 

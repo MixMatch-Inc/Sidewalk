@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { connectDB } from "./config/db";
+import { getApiEnv } from "./config/env";
 import { getLiveness, getReadiness } from "./modules/health/health.controller";
 import { stellarService } from "./config/stellar";
 import reportsRoutes from "./modules/reports/reports.routes";
@@ -21,7 +22,8 @@ import { tieredApiRateLimiter } from "./core/rate-limit/rate-limit.middleware";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const env = getApiEnv();
+const PORT = env.PORT;
 
 app.set("trust proxy", 1);
 
@@ -47,14 +49,14 @@ const startServer = async () => {
     logger.info("Initializing Stellar service");
     await stellarService.ensureFunded();
 
-    if (process.env.ENABLE_MEDIA_WORKER !== "false") {
+    if (env.ENABLE_MEDIA_WORKER !== "false") {
       startMediaProcessingWorker();
       startMediaCleanupWorker();
       await ensureMediaCleanupSchedule();
       logger.info("Media workers initialized (processing + orphan cleanup)");
     }
 
-    if (process.env.ENABLE_STELLAR_ANCHOR_WORKER !== "false") {
+    if (env.ENABLE_STELLAR_ANCHOR_WORKER !== "false") {
       startStellarAnchorWorker();
       logger.info("Stellar anchor worker initialized");
     }

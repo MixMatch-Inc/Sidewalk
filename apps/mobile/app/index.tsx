@@ -1,26 +1,32 @@
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { getMobileEnv } from '../src/config/env';
 
 export default function App() {
   const [status, setStatus] = useState<string>('Checking...');
   const [loading, setLoading] = useState(true);
-
-  const API_URL = 'http://localhost:5001/api/health';
+  const { apiUrl } = getMobileEnv();
+  const healthEndpoint = `${apiUrl}/api/health`;
 
   useEffect(() => {
-    fetch(API_URL)
+    fetch(healthEndpoint)
       .then((res) => res.json())
       .then((data) => {
-        setStatus(`API: ${data.status}\nStellar: ${data.stellar_connected}`);
+        const integrations = data.integrations
+          ? Object.entries(data.integrations)
+              .map(([name, value]) => `${name}: ${String(value)}`)
+              .join('\n')
+          : 'No integration details';
+        setStatus(`API: ${data.status}\n${integrations}`);
         setLoading(false);
       })
       .catch((err) => {
-        setStatus('Error connecting to API');
+        setStatus(`Error connecting to API\n${healthEndpoint}`);
         console.error(err);
         setLoading(false);
       });
-  }, []);
+  }, [healthEndpoint]);
 
   return (
     <View style={styles.container}>

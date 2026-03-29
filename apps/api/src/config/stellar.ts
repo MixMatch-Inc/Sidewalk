@@ -1,13 +1,10 @@
 import { StellarService } from '@sidewalk/stellar';
 
 import dotenv from 'dotenv';
+import { getStellarEnv } from './env';
 
 dotenv.config();
 
-const secret = process.env.STELLAR_SECRET_KEY;
+const { STELLAR_SECRET_KEY } = getStellarEnv();
 
-if (!secret) {
-  throw new Error('❌ Missing STELLAR_SECRET_KEY in .env file');
-}
-
-export const stellarService = new StellarService(secret);
+export const stellarService = new StellarService(STELLAR_SECRET_KEY);

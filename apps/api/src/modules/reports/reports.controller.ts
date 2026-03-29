@@ -6,13 +6,12 @@ import { AppError } from '../../core/errors/app-error';
 import { logger } from '../../core/logging/logger';
 import { MediaDraftModel } from '../media/media-draft.model';
 import { MediaUploadModel } from '../media/media-upload.model';
-import { UserModel } from '../users/user.model';
-import { ReportModel, type ReportStatus } from './report.model';
+import { StatusUpdateModel } from './status-update.model';
+import { ReportModel } from './report.model';
 import { enqueueStellarAnchor } from './reports.anchor.queue';
 import { StatusUpdateModel } from './status-update.model';
 import {
   CreateReportDTO,
-  ReportParamsDTO,
   ListReportsQueryDTO,
   ReportsMapQueryDTO,
   UpdateReportStatusDTO,

@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import {
   createReport,
-  getReportDetail,
-  getReportList,
+  listReports,
   getMapReports,
   getMyReports,
   verifyReport,
@@ -15,7 +14,7 @@ import { stellarAnchoringRateLimiter } from '../../core/rate-limit/rate-limit.mi
 import {
   anchorIssuesQuerySchema,
   createReportBodySchema,
-  myReportsQuerySchema,
+  listReportsQuerySchema,
   reportsMapQuerySchema,
   updateReportStatusBodySchema,
   verifyReportBodySchema,
@@ -28,16 +27,8 @@ router.get(
   '/',
   authenticateToken,
   requireRole(['CITIZEN', 'AGENCY_ADMIN']),
-  validateRequest({ query: reportListQuerySchema }),
-  getReportList,
-);
-
-router.get(
-  '/:reportId',
-  authenticateToken,
-  requireRole(['CITIZEN', 'AGENCY_ADMIN']),
-  validateRequest({ params: reportDetailParamsSchema }),
-  getReportDetail,
+  validateRequest({ query: listReportsQuerySchema }),
+  listReports,
 );
 
 router.get(

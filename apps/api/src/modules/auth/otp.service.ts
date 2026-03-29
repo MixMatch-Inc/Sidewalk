@@ -5,6 +5,7 @@ import { createInitialSession } from './auth.tokens';
 import { sendOtpEmail } from './otp.email';
 import { otpStore } from './otp.store';
 import { Role } from './auth.types';
+import { ensureUserForOtpLogin } from '../users/users.service';
 
 const OTP_TTL_SECONDS = 5 * 60;
 const OTP_COOLDOWN_SECONDS = 60;
@@ -94,11 +95,16 @@ export const verifyOtpAndCreateSession = async (params: {
   await otpStore.clearOtp(email);
 
   const role = params.role ?? 'CITIZEN';
+  const user = await ensureUserForOtpLogin({
+    email,
+    role,
+    district: params.district,
+  });
   const session = await createInitialSession(
     {
-      id: email,
-      role,
-      district: params.district,
+      id: String(user._id),
+      role: user.role,
+      district: user.district,
     },
     params.deviceId,
   );

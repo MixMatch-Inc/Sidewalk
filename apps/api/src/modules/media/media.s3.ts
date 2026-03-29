@@ -12,33 +12,33 @@ import {
 import { Readable } from 'stream';
 import sharp from 'sharp';
 import { AppError } from '../../core/errors/app-error';
+import { getApiEnv, getS3Env } from '../../config/env';
 
-const bucket = process.env.S3_BUCKET;
-const region = process.env.S3_REGION ?? 'us-east-1';
-const endpoint = process.env.S3_ENDPOINT;
-const accessKeyId = process.env.S3_ACCESS_KEY_ID;
-const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
+const getS3ClientConfig = () => {
+  const { S3_BUCKET, S3_REGION, S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY } =
+    getS3Env();
 
-if (!bucket) {
-  throw new AppError('Missing S3_BUCKET environment variable', 500, 'S3_CONFIG_MISSING');
-}
+  return {
+    bucket: S3_BUCKET,
+    region: S3_REGION,
+    endpoint: S3_ENDPOINT,
+    accessKeyId: S3_ACCESS_KEY_ID,
+    secretAccessKey: S3_SECRET_ACCESS_KEY,
+  };
+};
 
-if (!accessKeyId || !secretAccessKey) {
-  throw new AppError(
-    'Missing S3_ACCESS_KEY_ID or S3_SECRET_ACCESS_KEY environment variable',
-    500,
-    'S3_CONFIG_MISSING',
-  );
-}
+const getS3Client = () => {
+  const { region, endpoint, accessKeyId, secretAccessKey } = getS3ClientConfig();
 
-const client = new S3Client({
-  region,
-  ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
-  credentials: {
-    accessKeyId,
-    secretAccessKey,
-  },
-});
+  return new S3Client({
+    region,
+    ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
+};
 
 const extensionForMime = (mime: string) => {
   if (mime === 'image/jpeg') return '.jpg';
@@ -48,17 +48,17 @@ const extensionForMime = (mime: string) => {
 };
 
 export const buildObjectUrl = (objectKey: string) => {
-  const publicBase = process.env.S3_PUBLIC_BASE_URL;
-  if (publicBase) {
-    return `${publicBase.replace(/\/+$/, '')}/${objectKey}`;
+  const { S3_PUBLIC_BASE_URL, S3_BUCKET, S3_REGION, S3_ENDPOINT } = getApiEnv();
+  if (S3_PUBLIC_BASE_URL) {
+    return `${S3_PUBLIC_BASE_URL.replace(/\/+$/, '')}/${objectKey}`;
   }
 
-  if (endpoint) {
-    const normalized = endpoint.replace(/\/+$/, '');
-    return `${normalized}/${bucket}/${objectKey}`;
+  if (S3_ENDPOINT) {
+    const normalized = S3_ENDPOINT.replace(/\/+$/, '');
+    return `${normalized}/${S3_BUCKET}/${objectKey}`;
   }
 
-  return `https://${bucket}.s3.${region}.amazonaws.com/${objectKey}`;
+  return `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${objectKey}`;
 };
 
 export const buildObjectKey = (mime: string) => {
@@ -71,6 +71,8 @@ export const uploadStreamToS3 = async (
   mime: string,
   objectKey: string,
 ) => {
+  const client = getS3Client();
+  const { bucket } = getS3ClientConfig();
   const params: PutObjectCommandInput = {
     Bucket: bucket,
     Key: objectKey,
@@ -100,6 +102,8 @@ const toBuffer = async (stream: Readable): Promise<Buffer> => {
 };
 
 export const compressAndReplaceImage = async (objectKey: string): Promise<void> => {
+  const client = getS3Client();
+  const { bucket } = getS3ClientConfig();
   const response = await client.send(
     new GetObjectCommand({
       Bucket: bucket,
@@ -138,6 +142,8 @@ export const generatePresignedGetObjectUrl = async (
   objectKey: string,
   expiresInSeconds = 900,
 ): Promise<string> => {
+  const client = getS3Client();
+  const { bucket } = getS3ClientConfig();
   return getSignedUrl(
     client as never,
     new GetObjectCommand({
@@ -155,6 +161,8 @@ export type S3ListedObject = {
 };
 
 export const listAllReportObjects = async (): Promise<S3ListedObject[]> => {
+  const client = getS3Client();
+  const { bucket } = getS3ClientConfig();
   const results: S3ListedObject[] = [];
   let continuationToken: string | undefined;
 
@@ -186,6 +194,8 @@ export const listAllReportObjects = async (): Promise<S3ListedObject[]> => {
 };
 
 export const deleteObjectFromS3 = async (objectKey: string): Promise<void> => {
+  const client = getS3Client();
+  const { bucket } = getS3ClientConfig();
   await client.send(
     new DeleteObjectCommand({
       Bucket: bucket,

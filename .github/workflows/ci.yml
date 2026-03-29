@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  backend:
-    name: Backend (API)
+  api:
+    name: API
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -45,3 +45,37 @@ jobs:
 
       - name: Build
         run: pnpm --filter sidewalk-api build
+
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --filter sidewalk-web lint
+
+      - name: Type check
+        run: pnpm --filter sidewalk-web typecheck
+
+      - name: Build
+        run: pnpm --filter sidewalk-web build

@@ -1,10 +1,10 @@
 import { logger } from '../../core/logging/logger';
-
-const resendApiKey = process.env.RESEND_API_KEY;
-const otpFromEmail = process.env.OTP_EMAIL_FROM ?? 'no-reply@sidewalk.local';
+import { getApiEnv } from '../../config/env';
 
 export const sendOtpEmail = async (email: string, otpCode: string): Promise<void> => {
-  if (!resendApiKey) {
+  const { RESEND_API_KEY, OTP_EMAIL_FROM } = getApiEnv();
+
+  if (!RESEND_API_KEY) {
     logger.warn('RESEND_API_KEY is missing, OTP email fallback to log output', {
       email,
       otpCode,
@@ -15,11 +15,11 @@ export const sendOtpEmail = async (email: string, otpCode: string): Promise<void
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${resendApiKey}`,
+      Authorization: `Bearer ${RESEND_API_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: otpFromEmail,
+      from: OTP_EMAIL_FROM,
       to: [email],
       subject: 'Your Sidewalk login code',
       html: `<p>Your Sidewalk verification code is <strong>${otpCode}</strong>.</p><p>This code expires in 5 minutes.</p>`,
