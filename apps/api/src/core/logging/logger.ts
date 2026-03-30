@@ -42,4 +42,14 @@ export const logger = {
   info: (message: string, context?: Record<string, LogValue>): void => write("info", message, context),
   warn: (message: string, context?: Record<string, LogValue>): void => write("warn", message, context),
   error: (message: string, context?: Record<string, LogValue>): void => write("error", message, context),
+  child:
+    (baseContext: Record<string, LogValue>) =>
+    ({
+      info: (message: string, context?: Record<string, LogValue>) =>
+        write("info", message, { ...baseContext, ...(context ?? {}) }),
+      warn: (message: string, context?: Record<string, LogValue>) =>
+        write("warn", message, { ...baseContext, ...(context ?? {}) }),
+      error: (message: string, context?: Record<string, LogValue>) =>
+        write("error", message, { ...baseContext, ...(context ?? {}) }),
+    }) as const,
 };

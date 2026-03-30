@@ -57,6 +57,11 @@ let worker: Worker<StellarAnchorJob, void, typeof JOB_NAME> | null = null;
 
 const processAnchorJob = async (job: Job<StellarAnchorJob>): Promise<void> => {
   const { reportId, dataHash } = job.data;
+  const jobLogger = logger.child({
+    queue: QUEUE_NAME,
+    jobId: String(job.id),
+    reportId,
+  });
 
   const report = await ReportModel.findById(reportId).select({
     _id: 1,
@@ -66,7 +71,7 @@ const processAnchorJob = async (job: Job<StellarAnchorJob>): Promise<void> => {
   });
 
   if (!report) {
-    logger.warn('Anchor job skipped; report not found', { reportId });
+    jobLogger.warn('Anchor job skipped; report not found');
     return;
   }
 
@@ -74,17 +79,14 @@ const processAnchorJob = async (job: Job<StellarAnchorJob>): Promise<void> => {
     report.stellar_tx_hash ||
     report.anchor_status === 'ANCHOR_SUCCESS'
   ) {
-    logger.info('Anchor job skipped; report already anchored', {
-      reportId,
+    jobLogger.info('Anchor job skipped; report already anchored', {
       txHash: report.stellar_tx_hash,
     });
     return;
   }
 
   if (report.anchor_status === 'ANCHOR_FAILED') {
-    logger.warn('Anchor job skipped; report already marked permanently failed', {
-      reportId,
-    });
+    jobLogger.warn('Anchor job skipped; report already marked permanently failed');
     return;
   }
 
@@ -116,7 +118,7 @@ const processAnchorJob = async (job: Job<StellarAnchorJob>): Promise<void> => {
       },
     );
 
-    logger.info('Report anchored successfully', { reportId, txHash });
+    jobLogger.info('Report anchored successfully', { txHash });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const isFinalFailure = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
@@ -133,8 +135,7 @@ const processAnchorJob = async (job: Job<StellarAnchorJob>): Promise<void> => {
     );
 
     if (isFinalFailure) {
-      logger.error('Anchor job exhausted retries; compensating state applied', {
-        reportId,
+      jobLogger.error('Anchor job exhausted retries; compensating state applied', {
         anchorStatus: 'ANCHOR_FAILED',
         dashboardAlert: true,
         reason: message,
@@ -165,6 +166,7 @@ export const startStellarAnchorWorker = () => {
 
   worker.on('failed', (job, error) => {
     logger.warn('Stellar anchor job failed', {
+      queue: QUEUE_NAME,
       jobId: job?.id,
       reportId: job?.data?.reportId,
       attemptsMade: job?.attemptsMade,

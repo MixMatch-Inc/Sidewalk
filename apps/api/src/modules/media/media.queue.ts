@@ -33,10 +33,12 @@ export const mediaProcessingQueue = queueConnection
   : null;
 
 export const enqueueMediaProcessing = async (payload: MediaProcessingJob) => {
+  const queueLogger = logger.child({
+    queue: 'image-processing',
+    key: payload.key,
+  });
   if (!mediaProcessingQueue) {
-    logger.warn('Media queue unavailable (missing REDIS_URL); keeping original image', {
-      key: payload.key,
-    });
+    queueLogger.warn('Media queue unavailable (missing REDIS_URL); keeping original image');
     return;
   }
 
@@ -61,8 +63,7 @@ export const enqueueMediaProcessing = async (payload: MediaProcessingJob) => {
       { upsert: true },
     );
   } catch (error) {
-    logger.warn('Failed to enqueue media processing job; keeping original image', {
-      key: payload.key,
+    queueLogger.warn('Failed to enqueue media processing job; keeping original image', {
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -84,6 +85,11 @@ export const startMediaProcessingWorker = () => {
     'image-processing',
     async (job: Job<MediaProcessingJob>) => {
       const { key, url } = job.data;
+      const jobLogger = logger.child({
+        queue: 'image-processing',
+        jobId: String(job.id),
+        key,
+      });
 
       try {
         await MediaUploadModel.updateOne(
@@ -115,8 +121,7 @@ export const startMediaProcessingWorker = () => {
           },
         );
 
-        logger.error('Image processing job failed; original image retained', {
-          key,
+        jobLogger.error('Image processing job failed; original image retained', {
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -129,6 +134,7 @@ export const startMediaProcessingWorker = () => {
 
   worker.on('failed', (job, error) => {
     logger.warn('Media worker job failed', {
+      queue: 'image-processing',
       jobId: job?.id,
       key: job?.data?.key,
       error: error.message,
