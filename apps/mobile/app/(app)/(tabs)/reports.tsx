@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -46,7 +46,7 @@ export default function ReportsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadReports = useEffectEvent(async () => {
+  const loadReports = useCallback(async () => {
     if (!accessToken) {
       setReports([]);
       setError(null);
@@ -69,11 +69,11 @@ export default function ReportsScreen() {
     } finally {
       setIsLoading(false);
     }
-  });
+  }, [accessToken]);
 
   useEffect(() => {
     void loadReports();
-  }, [accessToken]);
+  }, [loadReports]);
 
   if (isLoading) {
     return (
@@ -103,6 +103,9 @@ export default function ReportsScreen() {
         <Text style={styles.helperCopy}>
           Reports you submit from Sidewalk will appear here once they are accepted.
         </Text>
+        <Pressable onPress={() => router.push('/(app)/reports/new')} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Submit a report</Text>
+        </Pressable>
       </View>
     );
   }
@@ -139,6 +142,9 @@ export default function ReportsScreen() {
           <Text style={styles.headerCopy}>
             Review report status, anchoring progress, and integrity alerts in one place.
           </Text>
+          <Pressable onPress={() => router.push('/(app)/reports/new')} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>New report</Text>
+          </Pressable>
         </View>
       }
       ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -183,6 +189,18 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#173d31',
+    fontWeight: '700',
+  },
+  primaryButton: {
+    marginTop: 16,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#1f4d3f',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  primaryButtonText: {
+    color: '#f8fff8',
     fontWeight: '700',
   },
   listContent: {
