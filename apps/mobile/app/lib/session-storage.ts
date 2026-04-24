@@ -36,18 +36,18 @@ export const getDeviceId = async () => {
 };
 
 export const persistSession = async (session: StoredSession) => {
-  await AsyncStorage.multiSet([
-    [ACCESS_TOKEN_KEY, session.accessToken],
-    [ACCESS_TOKEN_EXPIRES_AT_KEY, session.accessTokenExpiresAt],
-    [REFRESH_TOKEN_KEY, session.refreshToken],
-    [REFRESH_TOKEN_EXPIRES_AT_KEY, session.refreshTokenExpiresAt],
-    [EMAIL_KEY, session.email],
-    [ROLE_KEY, session.role ?? 'CITIZEN'],
-  ]);
+  await AsyncStorage.setMany({
+    [ACCESS_TOKEN_KEY]: session.accessToken,
+    [ACCESS_TOKEN_EXPIRES_AT_KEY]: session.accessTokenExpiresAt,
+    [REFRESH_TOKEN_KEY]: session.refreshToken,
+    [REFRESH_TOKEN_EXPIRES_AT_KEY]: session.refreshTokenExpiresAt,
+    [EMAIL_KEY]: session.email,
+    [ROLE_KEY]: session.role ?? 'CITIZEN',
+  });
 };
 
 export const readStoredSession = async (): Promise<StoredSession | null> => {
-  const entries = await AsyncStorage.multiGet([
+  const values = await AsyncStorage.getMany([
     ACCESS_TOKEN_KEY,
     ACCESS_TOKEN_EXPIRES_AT_KEY,
     REFRESH_TOKEN_KEY,
@@ -55,8 +55,6 @@ export const readStoredSession = async (): Promise<StoredSession | null> => {
     EMAIL_KEY,
     ROLE_KEY,
   ]);
-
-  const values = Object.fromEntries(entries);
 
   if (
     !values[ACCESS_TOKEN_KEY] ||
@@ -82,7 +80,7 @@ export const readStoredSession = async (): Promise<StoredSession | null> => {
 };
 
 export const clearStoredSession = async () => {
-  await AsyncStorage.multiRemove([
+  await AsyncStorage.removeMany([
     ACCESS_TOKEN_KEY,
     ACCESS_TOKEN_EXPIRES_AT_KEY,
     REFRESH_TOKEN_KEY,

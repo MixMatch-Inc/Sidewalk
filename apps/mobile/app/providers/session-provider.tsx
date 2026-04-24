@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, ReactNode, useContext, useEffect, useEffectEvent, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import {
   clearStoredSession,
@@ -94,7 +94,7 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
     await hydrateState(stored);
   };
 
-  const restoreSession = useEffectEvent(async () => {
+  const restoreSession = useCallback(async () => {
     const resolvedDeviceId = await getDeviceId();
     setDeviceId(resolvedDeviceId);
 
@@ -135,7 +135,7 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
     } catch {
       await signOut();
     }
-  });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +155,7 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [restoreSession]);
 
   return (
     <SessionContext.Provider
