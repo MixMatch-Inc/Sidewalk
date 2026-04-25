@@ -20,6 +20,10 @@ type ApiErrorPayload = {
   };
 };
 
+type AuthorizedInit = RequestInit & {
+  contentType?: string | null;
+};
+
 const readJsonPayload = async <T>(response: Response): Promise<(T & ApiErrorPayload) | null> => {
   const text = await response.text();
   if (!text) {
@@ -47,17 +51,36 @@ export const apiFetch = async <T>(path: string, init?: RequestInit): Promise<T> 
   return (payload ?? {}) as T;
 };
 
+export const authorizedFetch = async (
+  path: string,
+  accessToken: string,
+  init?: AuthorizedInit,
+): Promise<Response> => {
+  const { contentType = 'application/json', headers, ...rest } = init ?? {};
+
+  const mergedHeaders = new Headers(headers ?? {});
+  mergedHeaders.set('Authorization', `Bearer ${accessToken}`);
+  if (contentType) {
+    mergedHeaders.set('Content-Type', contentType);
+  }
+
+  return fetch(`${apiBaseUrl}${path}`, {
+    ...rest,
+    headers: mergedHeaders,
+  });
+};
+
 export const authorizedApiFetch = async <T>(
   path: string,
   accessToken: string,
-  init?: RequestInit,
+  init?: AuthorizedInit,
 ): Promise<T> => {
-  return apiFetch<T>(path, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${accessToken}`,
-      ...(init?.headers ?? {}),
-    },
-  });
+  const response = await authorizedFetch(path, accessToken, init);
+  const payload = await readJsonPayload<T>(response);
+
+  if (!response.ok) {
+    throw new Error(toErrorMessage(payload, 'Request failed'));
+  }
+
+  return (payload ?? {}) as T;
 };

@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { authorizedApiFetch } from '../../lib/api';
+import { ReportPillRow } from '../../components/report-pills';
 import { useSession } from '../../providers/session-provider';
 
 type MyReport = {
@@ -126,13 +127,14 @@ export default function ReportsScreen() {
         >
           <Text style={styles.eyebrow}>{item.category}</Text>
           <Text style={styles.cardTitle}>{item.title}</Text>
-          <Text style={styles.metaText}>
-            {item.status} · {item.anchorStatus}
-          </Text>
+          <ReportPillRow
+            items={[
+              { value: item.status },
+              { value: item.anchorStatus },
+              { value: item.integrityFlag },
+            ]}
+          />
           <Text style={styles.metaText}>{formatCreatedAt(item.createdAt)}</Text>
-          {item.integrityFlag !== 'NORMAL' ? (
-            <Text style={styles.warningText}>Integrity flag: {item.integrityFlag}</Text>
-          ) : null}
         </Pressable>
       )}
       ListHeaderComponent={
@@ -251,11 +253,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
     color: '#51615a',
     lineHeight: 20,
-  },
-  warningText: {
-    marginTop: 10,
-    color: '#a13a29',
-    fontWeight: '600',
   },
   separator: {
     height: 14,

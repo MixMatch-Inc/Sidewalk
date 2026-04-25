@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { authorizedApiFetch } from '../../lib/api';
+import { ReportPillRow } from '../../components/report-pills';
 import { useSession } from '../../providers/session-provider';
 
 type ReportDetail = {
@@ -50,7 +51,11 @@ const formatCoordinates = (coordinates: [number, number]) => {
 };
 
 export default function ReportDetailScreen() {
-  const { reportId } = useLocalSearchParams<{ reportId: string }>();
+  const { reportId, justSubmitted, anchorStatus } = useLocalSearchParams<{
+    reportId: string;
+    justSubmitted?: string;
+    anchorStatus?: string;
+  }>();
   const { accessToken } = useSession();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,9 +111,23 @@ export default function ReportDetailScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.eyebrow}>{report.category}</Text>
       <Text style={styles.title}>{report.title}</Text>
-      <Text style={styles.meta}>
-        {report.status} · {report.anchor_status} · {report.integrity_flag}
-      </Text>
+      {justSubmitted === '1' ? (
+        <View style={styles.noticeCard}>
+          <Text style={styles.noticeTitle}>Report accepted</Text>
+          <Text style={styles.noticeText}>
+            {anchorStatus === 'ANCHOR_QUEUED'
+              ? 'Your report was accepted and blockchain anchoring is now queued.'
+              : 'Your report was accepted successfully.'}
+          </Text>
+        </View>
+      ) : null}
+      <ReportPillRow
+        items={[
+          { value: report.status },
+          { value: report.anchor_status },
+          { value: report.integrity_flag },
+        ]}
+      />
       <Text style={styles.description}>{report.description}</Text>
 
       <View style={styles.card}>
@@ -216,13 +235,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#112219',
   },
-  meta: {
-    color: '#405149',
-    lineHeight: 22,
-  },
   description: {
     color: '#1e2c26',
     lineHeight: 24,
+  },
+  noticeCard: {
+    borderRadius: 20,
+    padding: 16,
+    backgroundColor: '#e7f4ee',
+  },
+  noticeTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#173d31',
+  },
+  noticeText: {
+    marginTop: 6,
+    color: '#1f4d3f',
+    lineHeight: 21,
   },
   card: {
     borderRadius: 24,
