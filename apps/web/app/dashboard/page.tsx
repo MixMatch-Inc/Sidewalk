@@ -1,28 +1,45 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { getStoredRole } from '../lib/auth-storage';
+
+const citizenLinks = [
+  { href: '/dashboard/reports/new', label: 'Submit a report' },
+  { href: '/dashboard/reports', label: 'My reports' },
+];
+
+const agencyLinks = [
+  { href: '/dashboard/reports', label: 'Reports queue' },
+  { href: '/dashboard/admin', label: 'Admin panel' },
+];
+
 export default function DashboardPage() {
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRole(getStoredRole());
+  }, []);
+
+  const isAgency = role === 'agency' || role === 'admin';
+  const links = isAgency ? agencyLinks : citizenLinks;
+  const heading = isAgency ? 'Agency workspace' : 'Citizen workspace';
+
   return (
     <main className="page-shell">
       <section className="hero compact">
         <p className="eyebrow">Dashboard</p>
-        <h1>Authenticated workspace.</h1>
-        <p className="lede">
-          This protected shell confirms web sessions can be restored through the refresh
-          cookie flow before additional citizen or admin dashboards land.
-        </p>
+        <h1>{heading}</h1>
       </section>
 
       <section className="surface-grid">
-        <article className="surface-card">
-          <h2>Session guard</h2>
-          <p>Protected routes redirect back to OTP login when no access token or refresh path exists.</p>
-        </article>
-        <article className="surface-card">
-          <h2>Reports</h2>
-          <p>Open the reports workspace to submit new reports or inspect the authenticated list and detail flows.</p>
-        </article>
-        <article className="surface-card">
-          <h2>Ready for expansion</h2>
-          <p>This route can host report queues and detail screens without changing the auth contract.</p>
-        </article>
+        {links.map(({ href, label }) => (
+          <article className="surface-card" key={href}>
+            <Link className="button button-primary" href={href}>
+              {label}
+            </Link>
+          </article>
+        ))}
       </section>
     </main>
   );
