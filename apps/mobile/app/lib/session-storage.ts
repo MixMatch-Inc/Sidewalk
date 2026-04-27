@@ -20,6 +20,18 @@ export type StoredSession = {
 const createFallbackDeviceId = () =>
   `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 
+const isSafeTimestamp = (value: string | null | undefined) => {
+  if (!value || typeof value !== 'string') {
+    return false;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed);
+};
+
+const normalizeRole = (value: string | null | undefined): StoredSession['role'] =>
+  value === 'AGENCY_ADMIN' || value === 'CITIZEN' ? value : undefined;
+
 export const getDeviceId = async () => {
   const existing = await AsyncStorage.getItem(DEVICE_ID_KEY);
   if (existing) {
@@ -63,6 +75,20 @@ export const readStoredSession = async (): Promise<StoredSession | null> => {
     !values[REFRESH_TOKEN_EXPIRES_AT_KEY] ||
     !values[EMAIL_KEY]
   ) {
+    await clearStoredSession();
+    return null;
+  }
+
+  if (
+    !isSafeTimestamp(values[ACCESS_TOKEN_EXPIRES_AT_KEY]) ||
+    !isSafeTimestamp(values[REFRESH_TOKEN_EXPIRES_AT_KEY])
+  ) {
+    await clearStoredSession();
+    return null;
+  }
+
+  if (typeof values[ACCESS_TOKEN_KEY] !== 'string' || values[ACCESS_TOKEN_KEY].trim() === '') {
+    await clearStoredSession();
     return null;
   }
 
@@ -72,10 +98,30 @@ export const readStoredSession = async (): Promise<StoredSession | null> => {
     refreshToken: values[REFRESH_TOKEN_KEY],
     refreshTokenExpiresAt: values[REFRESH_TOKEN_EXPIRES_AT_KEY],
     email: values[EMAIL_KEY],
-    role:
-      values[ROLE_KEY] === 'AGENCY_ADMIN' || values[ROLE_KEY] === 'CITIZEN'
-        ? values[ROLE_KEY]
-        : undefined,
+    role: normalizeRole(values[ROLE_KEY])edSession();
+    return null;
+  }
+
+  if (
+    !isSafeTimestamp(values[ACCESS_TOKEN_EXPIRES_AT_KEY]) ||
+    !isSafeTimestamp(values[REFRESH_TOKEN_EXPIRES_AT_KEY])
+  ) {
+    await clearStoredSession();
+    return null;
+  }
+
+  if (typeof values[ACCESS_TOKEN_KEY] !== 'string' || values[ACCESS_TOKEN_KEY'].trim() === '') {
+    await clearStoredSession();
+    return null;
+  }
+
+  return {
+    accessToken: values[ACCESS_TOKEN_KEY],
+    accessTokenExpiresAt: values[ACCESS_TOKEN_EXPIRES_AT_KEY],
+    refreshToken: values[REFRESH_TOKEN_KEY],
+    refreshTokenExpiresAt: values[REFRESH_TOKEN_EXPIRES_AT_KEY],
+    email: values[EMAIL_KEY],
+    role: normalizeRole(values[ROLE_KEY]),
   };
 };
 

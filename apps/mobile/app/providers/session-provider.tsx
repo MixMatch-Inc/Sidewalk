@@ -2,6 +2,7 @@
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { apiFetch } from '../lib/api';
+import { trackEvent } from '../lib/analytics';
 import {
   clearStoredSession,
   getDeviceId,
@@ -131,7 +132,9 @@ export function SessionProvider({ children }: Readonly<{ children: ReactNode }>)
       });
 
       await persistSession(refreshed);
-      await hydrateState(refreshed);
+      trackEvent('auth.session_restore', { success: true });
+    } catch {
+      trackEvent('auth.session_restore', { success: false });ydrateState(refreshed);
     } catch {
       await signOut();
     }

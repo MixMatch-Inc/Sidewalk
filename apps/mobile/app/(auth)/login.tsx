@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { apiFetch } from '../lib/api';
+import { trackEvent } from '../lib/analytics';
 import { useSession } from '../providers/session-provider';
 
 type RequestOtpResponse = {
@@ -26,7 +27,8 @@ type VerifyOtpResponse = {
 };
 
 export default function LoginScreen() {
-  const router = useRouter();
+  const roreturnTo } = useLocalSearchParams<{ returnTo?: string }>();
+  const { uter = useRouter();
   const { deviceId, signIn } = useSession();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -50,7 +52,11 @@ export default function LoginScreen() {
     setIsRequesting(true);
     setRequestError(null);
     setVerifyError(null);
+trackEvent('auth.otp_requested', {
+        method: 'otp',
+      });
 
+      
     try {
       const payload = await apiFetch<RequestOtpResponse>('/api/auth/request-otp', {
         method: 'POST',
@@ -75,12 +81,10 @@ export default function LoginScreen() {
     if (!deviceId) {
       setVerifyError('Device session is still initializing. Try again in a moment.');
       return;
-    }
+    }trackEvent('auth.verify_started', {
+        method: 'otp',
+      });
 
-    setIsVerifying(true);
-    setVerifyError(null);
-
-    try {
       const payload = await apiFetch<VerifyOtpResponse>('/api/auth/verify-otp', {
         method: 'POST',
         headers: {
@@ -100,6 +104,19 @@ export default function LoginScreen() {
         accessToken: payload.accessToken,
         refreshToken: payload.refreshToken,
         refreshTokenExpiresAt: payload.refreshTokenExpiresAt,
+        email: email.trim(),
+        role,
+      });
+
+      trackEvent('auth.verify_success', {
+        method: 'otp',
+      });
+
+      router.replace(returnTo ?? '/(app)/(tabs)');
+    } catch (error) {
+      trackEvent('auth.verify_failure', {
+        method: 'otp',
+      });xpiresAt: payload.refreshTokenExpiresAt,
         email: email.trim(),
         role,
       });

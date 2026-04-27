@@ -16,6 +16,7 @@ import {
 import { authorizedApiFetch, authorizedFetch } from '../../lib/api';
 import { ReportPill, ReportPillRow } from '../../components/report-pills';
 import { useSession } from '../../providers/session-provider';
+import { trackEvent } from '../../lib/analytics';
 
 const reportCategories = [
   'INFRASTRUCTURE',
@@ -246,6 +247,8 @@ export default function NewReportScreen() {
 
     const uploadedUrls: string[] = [];
 
+    trackEvent('reports.upload.start', { count: selectedImages.length });
+
     for (const image of selectedImages) {
       markImageState(image.id, { uploadState: 'uploading', error: null });
 
@@ -281,6 +284,7 @@ export default function NewReportScreen() {
           error: null,
         });
       } catch (uploadError) {
+        trackEvent('reports.upload.failure');
         const message =
           uploadError instanceof Error ? uploadError.message : 'Image upload failed.';
         markImageState(image.id, {
@@ -291,6 +295,7 @@ export default function NewReportScreen() {
       }
     }
 
+    trackEvent('reports.upload.success', { count: uploadedUrls.length });
     return uploadedUrls;
   };
 
@@ -309,6 +314,12 @@ export default function NewReportScreen() {
       setError('Fix the highlighted fields before submitting your report.');
       return;
     }
+
+    trackEvent('reports.create.submit', {
+      categoryCount: 1,
+      hasImages: selectedImages.length > 0,
+      imageCount: selectedImages.length,
+    });
 
     setIsSubmitting(true);
     setError(null);
@@ -350,6 +361,9 @@ export default function NewReportScreen() {
           : 'Report accepted successfully.';
 
       setSuccessMessage(pendingMessage);
+      trackEvent('reports.create.success', {
+        anchorStatus: payload.anchor_status,
+      });
 
       setTimeout(() => {
         router.replace({
@@ -362,6 +376,9 @@ export default function NewReportScreen() {
         });
       }, 500);
     } catch (submitError) {
+      trackEvent('reports.create.failure', {
+        reason: submitError instanceof Error ? submitError.message : 'Unknown error',
+      });
       setError(submitError instanceof Error ? submitError.message : 'Unable to submit report.');
     } finally {
       setIsSubmitting(false);

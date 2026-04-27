@@ -11,6 +11,8 @@ import {
 import { authorizedApiFetch } from '../../lib/api';
 import { ReportPillRow } from '../../components/report-pills';
 import { useSession } from '../../providers/session-provider';
+import { trackEvent } from '../../lib/analytics';
+import { readCachedReportsList, writeCachedReportsList } from '../../lib/report-cache';
 
 type MyReport = {
   id: string;
@@ -45,6 +47,7 @@ export default function ReportsScreen() {
   const { accessToken } = useSession();
   const [reports, setReports] = useState<MyReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUsingCache, setIsUsingCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadReports = useCallback(async () => {
@@ -52,11 +55,23 @@ export default function ReportsScreen() {
       setReports([]);
       setError(null);
       setIsLoading(false);
+      setIsUsingCache(false);
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    setIsUsingCache(false);
+
+    try {
+      const cached = await readCachedReportsList<MyReportsResponse>();
+      if (cached) {
+        setReports(cached.data.data);
+        setIsUsingCache(true);
+      }
+    } catch {
+      // Ignore cache failure, continue to network.
+    }
 
     try {
       const payload = await authorizedApiFetch<MyReportsResponse>(
@@ -64,13 +79,18 @@ export default function ReportsScreen() {
         accessToken,
       );
       setReports(payload.data);
+      setIsUsingCache(false);
+      trackEvent('reports.list.view');
+      await writeCachedReportsList(payload);
     } catch (loadError) {
-      setReports([]);
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load your reports.');
+      if (!reports.length) {
+        setReports([]);
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load your reports.');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, reports.length]);
 
   useEffect(() => {
     void loadReports();
@@ -111,15 +131,18 @@ export default function ReportsScreen() {
     );
   }
 
+  const handleRefresh = async () => {
+    trackEvent('reports.list.refresh');
+    await loadReports();
+  };
+
   return (
     <FlatList
       contentContainerStyle={styles.listContent}
       data={reports}
       keyExtractor={(item) => item.id}
-      onRefresh={() => {
-        void loadReports();
-      }}
-      refreshing={isLoading}
+      onRefresh={handleRefresh}
+      refreshing={isLoading && reports.length > 0}
       renderItem={({ item }) => (
         <Pressable
           onPress={() => router.push(`/(app)/reports/${item.id}`)}

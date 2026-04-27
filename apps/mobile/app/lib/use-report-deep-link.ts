@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useSession } from '../providers/session-provider';
+import { trackEvent } from './analytics';
 
 type DeepLinkState =
   | { status: 'loading' }
@@ -34,7 +35,12 @@ export function useReportDeepLink(rawId: string | string[] | undefined): DeepLin
       });
       return;
     }
+trackEvent('reports.deep_link.open', {
+      source: 'public_report_url',
+      reportIdLength: reportId.length,
+    });
 
+    
     setState({ status: 'ready', reportId });
   }, [rawId, accessToken, isHydrating, router]);
 

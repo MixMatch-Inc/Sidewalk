@@ -1,9 +1,37 @@
-import { Redirect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
 import { useSession } from './providers/session-provider';
+import { parsePublicReportUrl } from './lib/public-report-link';
 
 export default function IndexScreen() {
   const { accessToken, isHydrating } = useSession();
+  const router = useRouter();
+
+  useEffect(() => {
+    const handleInitialUrl = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (!initialUrl) {
+        return;
+      }
+
+      const reportId = parsePublicReportUrl(initialUrl);
+      if (!reportId) {
+        return;
+      }
+
+      if (accessToken) {
+        router.replace(`/(app)/reports/${reportId}`);
+      } else {
+        router.replace({
+          pathname: '/(auth)/login',
+          params: { returnTo: `/(app)/reports/${reportId}` },
+        });
+      }
+    };
+
+    void handleInitialUrl();
+  }, [accessToken, router]);
 
   if (isHydrating) {
     return (

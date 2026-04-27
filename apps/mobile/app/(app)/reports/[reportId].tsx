@@ -2,16 +2,22 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { authorizedApiFetch } from '../../lib/api';
 import { ReportPillRow } from '../../components/report-pills';
+import { useReportDeepLink } from '../../lib/use-report-deep-link';
 import { useSession } from '../../providers/session-provider';
+import {
+  readCachedReportDetail,
+  writeCachedReportDetail,
+} from '../../lib/report-cache';
+import { trackEvent } from '../../lib/analytics';
 
 type ReportDetail = {
   id: string;
@@ -56,13 +62,19 @@ export default function ReportDetailScreen() {
     justSubmitted?: string;
     anchorStatus?: string;
   }>();
+  const deepLinkState = useReportDeepLink(reportId);
   const { accessToken } = useSession();
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUsingCache, setIsUsingCache] = useState(false);
+  const [cachedTimestamp, setCachedTimestamp] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const resolvedReportId =
+    deepLinkState.status === 'ready' ? deepLinkState.reportId : reportId;
+
   const loadReport = useCallback(async () => {
-    if (!accessToken || !reportId) {
+    if (!accessToken || !resolvedReportId) {
       setReport(null);
       setIsLoading(false);
       return;
@@ -70,21 +82,63 @@ export default function ReportDetailScreen() {
 
     setIsLoading(true);
     setError(null);
+    setIsUsingCache(false);
+    setCachedTimestamp(null);
+
+    let wasCached = false;
+    let hasReport = false;
 
     try {
-      const payload = await authorizedApiFetch<ReportDetail>(`/api/reports/${reportId}`, accessToken);
+      const cached = await readCachedReportDetail<ReportDetail>(resolvedReportId);
+      if (cached) {
+        setReport(cached.data);
+        setIsUsingCache(true);
+        setCachedTimestamp(cached.timestamp);
+        wasCached = true;
+        hasReport = true;
+      }
+    } catch {
+      // Ignore cache read failures and continue with network fetch.
+    }
+
+    try {
+      const payload = await authorizedApiFetch<ReportDetail>(`/api/reports/${resolvedReportId}`, accessToken);
       setReport(payload);
+      setIsUsingCache(false);
+      setCachedTimestamp(null);
+      hasReport = true;
+      await writeCachedReportDetail(resolvedReportId, payload);
+      trackEvent('reports.detail.view', {
+        source: wasCached ? 'cache_then_network' : 'network',
+      });
     } catch (loadError) {
-      setReport(null);
-      setError(loadError instanceof Error ? loadError.message : 'Unable to load report.');
+      if (!hasReport) {
+        setReport(null);
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load report.');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, reportId]);
+  }, [accessToken, resolvedReportId]);
 
   useEffect(() => {
+    if (deepLinkState.status === 'invalid') {
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
+
     void loadReport();
-  }, [loadReport]);
+  }, [deepLinkState.status, loadReport]);
+
+  if (deepLinkState.status === 'invalid') {
+    return (
+      <View style={styles.centeredState}>
+        <Text style={styles.errorTitle}>Invalid report link</Text>
+        <Text style={styles.helperCopy}>{deepLinkState.reason}</Text>
+      </View>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -100,6 +154,9 @@ export default function ReportDetailScreen() {
       <View style={styles.centeredState}>
         <Text style={styles.errorTitle}>We couldn&apos;t load this report.</Text>
         <Text style={styles.helperCopy}>{error ?? 'The report could not be found.'}</Text>
+        {isUsingCache ? (
+          <Text style={styles.helperText}>Showing cached data from {cachedTimestamp}.</Text>
+        ) : null}
         <Pressable onPress={loadReport} style={styles.secondaryButton}>
           <Text style={styles.secondaryButtonText}>Retry</Text>
         </Pressable>
@@ -107,8 +164,39 @@ export default function ReportDetailScreen() {
     );
   }
 
+  const handleShareReport = async () => {
+    if (!report) {
+      return;
+    }
+
+    try {
+      const publicUrl = `https://sidewalk.org/reports/${report.id}`;
+      await Share.share({
+        message: `Check out this Sidewalk report: "${report.title}" - ${publicUrl}`,
+        url: publicUrl,
+        title: report.title,
+      });
+
+      trackEvent('reports.detail.share', {
+        reportId: report.id.slice(0, 8),
+      });
+    } catch {
+      // User cancelled share or error occurred; silently fail.
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {isUsingCache && cachedTimestamp ? (
+        <View style={styles.cacheWarning}>
+          <Text style={styles.cacheWarningText}>
+            Showing cached data from {new Date(cachedTimestamp).toLocaleTimeString()}. Pull to refresh.
+          </Text>
+        </View>
+      ) : null}
+      <Pressable onPress={handleShareReport} style={styles.shareButton}>
+        <Text style={styles.shareButtonText}>Share Report</Text>
+      </Pressable>
       <Text style={styles.eyebrow}>{report.category}</Text>
       <Text style={styles.title}>{report.title}</Text>
       {justSubmitted === '1' ? (
@@ -213,6 +301,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: 'center',
   },
+  helperText: {
+    marginTop: 8,
+    color: '#51615a',
+    lineHeight: 20,
+  },
   errorTitle: {
     fontSize: 24,
     fontWeight: '700',
@@ -223,6 +316,28 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: '#fffaf2',
     gap: 16,
+  },
+  cacheWarning: {
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: '#fff3cd',
+  },
+  cacheWarningText: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
+  },
+  shareButton: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    backgroundColor: '#1f4d3f',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+  },
+  shareButtonText: {
+    color: '#f8fff8',
+    fontWeight: '700',
+    fontSize: 14,
   },
   eyebrow: {
     textTransform: 'uppercase',
