@@ -110,3 +110,60 @@ jobs:
 
       - name: Type check
         run: pnpm --filter mobile typecheck
+
+  stellar:
+    name: Stellar package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @sidewalk/stellar lint
+      - run: pnpm --filter @sidewalk/stellar typecheck
+      - run: pnpm --filter @sidewalk/stellar build
+
+  api-integration:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports: ['27017:27017']
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    env:
+      MONGO_URI: mongodb://localhost:27017/sidewalk_test
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-test-secret
+      STELLAR_SECRET_KEY: ci-test-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @sidewalk/stellar build
+      - run: pnpm --filter sidewalk-api build
+      - run: pnpm --filter sidewalk-api test
+
+  lockfile-check:
+    name: Enforce PNPM lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail on stray lockfiles
+        run: |
+          if find . -name "package-lock.json" -o -name "yarn.lock" | grep -v node_modules | grep .; then
+            echo "Stray lockfiles found — use pnpm only"; exit 1
+          fi
