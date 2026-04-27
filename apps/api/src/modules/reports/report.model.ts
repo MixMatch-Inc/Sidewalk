@@ -48,6 +48,7 @@ export interface Report {
   exif_verified: boolean;
   exif_distance_meters: number | null;
   integrity_flag: 'NORMAL' | 'SUSPICIOUS';
+  public_slug: string;
 }
 
 const stripHtml = (value: string): string =>
@@ -186,6 +187,16 @@ const reportSchema = new Schema<Report>(
       enum: ['NORMAL', 'SUSPICIOUS'],
       default: 'NORMAL',
       index: true,
+    },
+    public_slug: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      validate: {
+        validator: (value: string) => /^[a-z][a-z0-9]{7}$/.test(value),
+        message: 'public_slug must be 8 characters starting with a letter',
+      },
     },
   },
   { timestamps: true },

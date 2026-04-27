@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -7,12 +7,15 @@ import {
   StyleSheet,
   Text,
   View,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { authorizedApiFetch } from '../../lib/api';
 import { ReportPillRow } from '../../components/report-pills';
 import { useSession } from '../../providers/session-provider';
 import { trackEvent } from '../../lib/analytics';
 import { readCachedReportsList, writeCachedReportsList } from '../../lib/report-cache';
+import { DiscoveryFilterProvider, useDiscoveryFilters, DiscoveryFilters } from '../../components/DiscoveryFilters';
 
 type MyReport = {
   id: string;
@@ -42,17 +45,20 @@ const formatCreatedAt = (value: string | null) => {
   return new Date(value).toLocaleString();
 };
 
-export default function ReportsScreen() {
+function ReportsScreenContent() {
   const router = useRouter();
   const { accessToken } = useSession();
-  const [reports, setReports] = useState<MyReport[]>([]);
+  const [allReports, setAllReports] = useState<MyReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUsingCache, setIsUsingCache] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'title'>('newest');
+  const { filters, hasActiveFilters } = useDiscoveryFilters();
 
   const loadReports = useCallback(async () => {
     if (!accessToken) {
-      setReports([]);
+      setAllReports([]);
       setError(null);
       setIsLoading(false);
       setIsUsingCache(false);
@@ -66,7 +72,7 @@ export default function ReportsScreen() {
     try {
       const cached = await readCachedReportsList<MyReportsResponse>();
       if (cached) {
-        setReports(cached.data.data);
+        setAllReports(cached.data.data);
         setIsUsingCache(true);
       }
     } catch {
@@ -75,28 +81,28 @@ export default function ReportsScreen() {
 
     try {
       const payload = await authorizedApiFetch<MyReportsResponse>(
-        '/api/reports/mine?page=1&pageSize=20',
+        `/api/reports/mine?page=1&pageSize=20`,
         accessToken,
       );
-      setReports(payload.data);
+      setAllReports(payload.data);
       setIsUsingCache(false);
       trackEvent('reports.list.view');
       await writeCachedReportsList(payload);
     } catch (loadError) {
-      if (!reports.length) {
-        setReports([]);
+      if (!allReports.length) {
+        setAllReports([]);
         setError(loadError instanceof Error ? loadError.message : 'Unable to load your reports.');
       }
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, reports.length]);
+  }, [accessToken, allReports.length, filters]);
 
   useEffect(() => {
     void loadReports();
   }, [loadReports]);
 
-  if (isLoading) {
+  if (isLoading && allReports.length === 0) {
     return (
       <View style={styles.centeredState}>
         <ActivityIndicator size="large" color="#1f4d3f" />
@@ -117,19 +123,74 @@ export default function ReportsScreen() {
     );
   }
 
-  if (reports.length === 0) {
+  if (reports.length === 0 && !isLoading) {
+    const isEmptyState = allReports.length === 0;
+    const hasFilters = hasActiveFilters || filters.searchText;
+    
     return (
       <View style={styles.centeredState}>
-        <Text style={styles.emptyTitle}>No reports yet.</Text>
-        <Text style={styles.helperCopy}>
-          Reports you submit from Sidewalk will appear here once they are accepted.
+        <Text style={styles.emptyTitle}>
+          {hasFilters ? 'No matching reports' : 'No reports yet'}
         </Text>
-        <Pressable onPress={() => router.push('/(app)/reports/new')} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Submit a report</Text>
-        </Pressable>
+        <Text style={styles.helperCopy}>
+          {hasFilters 
+            ? 'Try adjusting your search or filters to find what you\'re looking for.'
+            : 'Reports you submit from Sidewalk will appear here once they are accepted.'
+          }
+        </Text>
+        {!hasFilters && (
+          <Pressable onPress={() => router.push('/(app)/reports/new')} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Submit a report</Text>
+          </Pressable>
+        )}
       </View>
     );
   }
+
+  // Filter and sort reports based on current filters and sort order
+  const filteredReports = useMemo(() => {
+    let filtered = allReports;
+
+    // Apply search filter
+    if (filters.searchText) {
+      const searchLower = filters.searchText.toLowerCase();
+      filtered = filtered.filter(report => 
+        report.title.toLowerCase().includes(searchLower) ||
+        report.category.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Apply category filter
+    if (filters.categories.length > 0) {
+      filtered = filtered.filter(report => 
+        filters.categories.includes(report.category)
+      );
+    }
+
+    // Apply status filter
+    if (filters.statuses.length > 0) {
+      filtered = filtered.filter(report => 
+        filters.statuses.includes(report.status)
+      );
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'newest':
+        filtered.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        break;
+      case 'oldest':
+        filtered.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        break;
+      case 'title':
+        filtered.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+    }
+
+    return filtered;
+  }, [allReports, filters, sortBy]);
+
+  const reports = filteredReports;
 
   const handleRefresh = async () => {
     trackEvent('reports.list.refresh');
@@ -167,6 +228,38 @@ export default function ReportsScreen() {
           <Text style={styles.headerCopy}>
             Review report status, anchoring progress, and integrity alerts in one place.
           </Text>
+          
+          {/* Search and Filter Controls */}
+          <View style={styles.controlsSection}>
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search reports..."
+                value={filters.searchText}
+                onChangeText={(text) => filters.setFilters({ searchText: text })}
+                placeholderTextColor="#9ca3af"
+              />
+            </View>
+            
+            <View style={styles.buttonRow}>
+              <Pressable 
+                style={[styles.filterButton, hasActiveFilters && styles.filterButtonActive]}
+                onPress={() => setShowFilters(true)}
+              >
+                <Text style={[styles.filterButtonText, hasActiveFilters && styles.filterButtonTextActive]}>
+                  Filters {hasActiveFilters && `(${filters.categories.length + filters.statuses.length})`}
+                </Text>
+              </Pressable>
+              
+              <Pressable style={styles.sortButton} onPress={() => {
+                const nextSort = sortBy === 'newest' ? 'oldest' : sortBy === 'oldest' ? 'title' : 'newest';
+                setSortBy(nextSort);
+              }}>
+                <Text style={styles.sortButtonText}>Sort: {sortBy}</Text>
+              </Pressable>
+            </View>
+          </View>
+          
           <Pressable onPress={() => router.push('/(app)/reports/new')} style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>New report</Text>
           </Pressable>
@@ -174,6 +267,19 @@ export default function ReportsScreen() {
       }
       ItemSeparatorComponent={() => <View style={styles.separator} />}
     />
+  );
+}
+
+export default function ReportsScreen() {
+  return (
+    <DiscoveryFilterProvider>
+      <ReportsScreenContent />
+      <DiscoveryFilters
+        visible={false}
+        onClose={() => {}}
+        showRadius={false}
+      />
+    </DiscoveryFilterProvider>
   );
 }
 
@@ -279,5 +385,61 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: 14,
+  },
+  controlsSection: {
+    marginTop: 16,
+  },
+  searchContainer: {
+    marginBottom: 12,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#d9d0bf',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    backgroundColor: '#ffffff',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  filterButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d9d0bf',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  filterButtonActive: {
+    backgroundColor: '#1f4d3f',
+    borderColor: '#1f4d3f',
+  },
+  filterButtonText: {
+    color: '#51615a',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  filterButtonTextActive: {
+    color: '#ffffff',
+  },
+  sortButton: {
+    borderWidth: 1,
+    borderColor: '#d9d0bf',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+  },
+  sortButtonText: {
+    color: '#51615a',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
