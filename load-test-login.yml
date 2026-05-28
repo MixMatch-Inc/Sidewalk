@@ -1,0 +1,48 @@
+config:
+  target: "http://localhost:4000"
+  phases:
+    # Brief warm-up before the spike
+    - name: "warm-up"
+      arrivalRate: 2
+      duration: 5
+    # Demo-day spike: 20 virtual users arriving over 10 seconds
+    - name: "demo-spike"
+      arrivalCount: 20
+      duration: 10
+  defaults:
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+  # Fail the run if p99 latency exceeds 1000ms or error rate exceeds 5%
+  ensure:
+    p99: 1000
+    maxErrorRate: 5
+
+scenarios:
+  # Scenario 1: Auth status probe (current implemented endpoint)
+  - name: "auth-status-probe"
+    weight: 50
+    flow:
+      - get:
+          url: "/auth/status"
+          expect:
+            - statusCode: 200
+
+  # Scenario 2: Login attempt (POST /auth/login — not yet implemented in foundation phase)
+  # This will return 404 and documents the missing rate-limit surface area.
+  # Remove this scenario once the login endpoint is built.
+  - name: "login-attempt"
+    weight: 50
+    flow:
+      - post:
+          url: "/auth/login"
+          json:
+            email: "demo-user-{{ $randomInt(1, 999) }}@sidewalk.local"
+            password: "demo-password"
+          # 404 is expected in foundation phase; 200/201 expected post-implementation
+          expect:
+            - statusCode:
+                - 200
+                - 201
+                - 404
+                - 429
