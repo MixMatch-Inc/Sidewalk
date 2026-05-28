@@ -1,3 +1,5 @@
+export * from "./auth.js";
+
 export type ApiHealth = {
   service: "api" | "stellar-service";
   status: "ok";
