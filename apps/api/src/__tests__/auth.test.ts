@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import request from "supertest";
 
-import { app, sessionStore } from "../app.js";
+import { app, sessionStore, tokenStore } from "../app.js";
 
 // ── password service ──────────────────────────────────────────────────────────
 import { hashPassword, verifyPassword } from "../services/password.js";
@@ -267,5 +267,161 @@ describe("POST /auth/logout/all", () => {
     const res = await request(app).post("/auth/logout/all");
     expect(res.status).toBe(401);
     expect(res.body.code).toBe("INVALID_TOKEN");
+  });
+});
+
+// ── email verification ────────────────────────────────────────────────────────
+
+describe("POST /auth/verify-email", () => {
+  it("marks account verified with a valid token", async () => {
+    const regRes = await request(app).post("/auth/register").send({ email: "verify2@example.com", password: "password123" });
+    const vToken = tokenStore.issue(regRes.body.id, "verify");
+
+    const res = await request(app).post("/auth/verify-email").send({ token: vToken });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toBe("Email verified.");
+  });
+
+  it("rejects an invalid token", async () => {
+    const res = await request(app).post("/auth/verify-email").send({ token: "bogus" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOKEN");
+  });
+
+  it("rejects a replayed token", async () => {
+    const regRes = await request(app).post("/auth/register").send({ email: "verify3@example.com", password: "password123" });
+    const vToken = tokenStore.issue(regRes.body.id, "verify");
+    await request(app).post("/auth/verify-email").send({ token: vToken });
+    const res = await request(app).post("/auth/verify-email").send({ token: vToken });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOKEN");
+  });
+});
+
+// ── password reset request ────────────────────────────────────────────────────
+
+describe("POST /auth/password-reset/request", () => {
+  it("returns privacy-safe response for a known email", async () => {
+    await request(app).post("/auth/register").send({ email: "reset1@example.com", password: "password123" });
+    const res = await request(app).post("/auth/password-reset/request").send({ email: "reset1@example.com" });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/reset link/i);
+  });
+
+  it("returns the same response for an unknown email", async () => {
+    const res = await request(app).post("/auth/password-reset/request").send({ email: "ghost@example.com" });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/reset link/i);
+  });
+
+  it("returns 400 for invalid email", async () => {
+    const res = await request(app).post("/auth/password-reset/request").send({ email: "not-an-email" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+// ── password reset completion ─────────────────────────────────────────────────
+
+describe("POST /auth/password-reset/complete", () => {
+  async function setupReset(email: string): Promise<{ accountId: string; resetToken: string }> {
+    const regRes = await request(app).post("/auth/register").send({ email, password: "oldpass123" });
+    const accountId = regRes.body.id;
+    const resetToken = tokenStore.issue(accountId, "reset");
+    return { accountId, resetToken };
+  }
+
+  it("updates password and revokes sessions on success", async () => {
+    const email = "complete1@example.com";
+    const { accountId, resetToken } = await setupReset(email);
+    const loginRes = await request(app).post("/auth/login").send({ email, password: "oldpass123" });
+    const { accessToken } = loginRes.body;
+
+    const res = await request(app).post("/auth/password-reset/complete").send({ token: resetToken, password: "newpass456" });
+    expect(res.status).toBe(200);
+    expect(res.body.message).toMatch(/log in again/i);
+
+    // Old session should be revoked
+    expect(sessionStore.getBySessionId(accessToken)).toBeUndefined();
+
+    // New password should work
+    const newLogin = await request(app).post("/auth/login").send({ email, password: "newpass456" });
+    expect(newLogin.status).toBe(200);
+  });
+
+  it("rejects an invalid token", async () => {
+    const res = await request(app).post("/auth/password-reset/complete").send({ token: "bogus", password: "newpass456" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOKEN");
+  });
+
+  it("rejects a replayed token", async () => {
+    const { resetToken } = await setupReset("complete2@example.com");
+    await request(app).post("/auth/password-reset/complete").send({ token: resetToken, password: "newpass456" });
+    const res = await request(app).post("/auth/password-reset/complete").send({ token: resetToken, password: "anotherpass" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOKEN");
+  });
+
+  it("rejects a verify token used on the reset endpoint", async () => {
+    const regRes = await request(app).post("/auth/register").send({ email: "complete3@example.com", password: "password123" });
+    const wrongToken = tokenStore.issue(regRes.body.id, "verify");
+    const res = await request(app).post("/auth/password-reset/complete").send({ token: wrongToken, password: "newpass456" });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("INVALID_TOKEN");
+  });
+});
+
+// ── rate limiting ─────────────────────────────────────────────────────────────
+
+import { makeRateLimiter } from "../middleware/authRateLimit.js";
+import type { Request, Response } from "express";
+
+describe("auth rate limiting", () => {
+  function makeReq(ip = "1.2.3.4"): Request {
+    return { ip } as unknown as Request;
+  }
+
+  function makeRes() {
+    const res = { statusCode: 200, body: undefined as unknown } as {
+      statusCode: number;
+      body: unknown;
+      status: (n: number) => { json: (b: unknown) => void };
+    };
+    res.status = (n: number) => {
+      res.statusCode = n;
+      return { json: (b: unknown) => { res.body = b; } };
+    };
+    return res;
+  }
+
+  it("allows requests under the limit", () => {
+    const limiter = makeRateLimiter(3, 60_000);
+    for (let i = 0; i < 3; i++) {
+      let passed = false;
+      limiter(makeReq(), makeRes() as unknown as Response, () => { passed = true; });
+      expect(passed).toBe(true);
+    }
+  });
+
+  it("blocks requests over the limit", () => {
+    const limiter = makeRateLimiter(3, 60_000);
+    for (let i = 0; i < 3; i++) {
+      limiter(makeReq(), makeRes() as unknown as Response, () => {});
+    }
+    const res = makeRes();
+    limiter(makeReq(), res as unknown as Response, () => {});
+    expect(res.statusCode).toBe(429);
+    expect((res.body as any).code).toBe("RATE_LIMITED");
+  });
+
+  it("tracks different IPs independently", () => {
+    const limiter = makeRateLimiter(2, 60_000);
+    limiter(makeReq("10.0.0.1"), makeRes() as unknown as Response, () => {});
+    limiter(makeReq("10.0.0.1"), makeRes() as unknown as Response, () => {});
+    // 10.0.0.1 is now at limit; 10.0.0.2 should still pass
+    let passed = false;
+    limiter(makeReq("10.0.0.2"), makeRes() as unknown as Response, () => { passed = true; });
+    expect(passed).toBe(true);
   });
 });

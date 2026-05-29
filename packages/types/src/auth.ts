@@ -48,13 +48,30 @@ export type LogoutResponse = { message: string };
 
 // ── Shared error shape ────────────────────────────────────────────────────────
 
+// ── Email verification ────────────────────────────────────────────────────────
+
+export type VerifyEmailRequest = { token: string };
+export type VerifyEmailResponse = { message: string };
+
+// ── Password reset ────────────────────────────────────────────────────────────
+
+export type PasswordResetRequestRequest = { email: string };
+export type PasswordResetRequestResponse = { message: string };
+
+export type PasswordResetCompleteRequest = { token: string; password: string };
+export type PasswordResetCompleteResponse = { message: string };
+
+// ── Shared error shape ────────────────────────────────────────────────────────
+
 export type AuthErrorCode =
   | "VALIDATION_ERROR"
   | "EMAIL_TAKEN"
   | "INVALID_CREDENTIALS"
   | "ACCOUNT_UNVERIFIED"
   | "INVALID_TOKEN"
-  | "SESSION_NOT_FOUND";
+  | "SESSION_NOT_FOUND"
+  | "TOKEN_EXPIRED"
+  | "RATE_LIMITED";
 
 export type AuthErrorResponse = {
   code: AuthErrorCode;
