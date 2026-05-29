@@ -12,12 +12,22 @@ import type {
   LoginResponse,
   RefreshResponse,
   LogoutResponse,
-  AuthErrorResponse
+  AuthErrorResponse,
+  VerifyEmailResponse,
+  PasswordResetRequestResponse,
+  PasswordResetCompleteResponse
 } from "@sidewalk/types";
 import type { Account } from "./models/account.js";
 import { toPublic } from "./models/account.js";
 import { hashPassword, verifyPassword } from "./services/password.js";
 import { MemorySessionStore } from "./services/sessionStore.js";
+import { MemoryTokenStore } from "./services/tokenStore.js";
+import {
+  loginRateLimit,
+  registerRateLimit,
+  resetRateLimit,
+  verifyResendRateLimit
+} from "./middleware/authRateLimit.js";
 
 const env = readServiceEnv(
   "api",
@@ -40,6 +50,7 @@ app.use(morgan("dev"));
 const accounts = new Map<string, Account>();
 let nextId = 1;
 export const sessionStore = new MemorySessionStore();
+export const tokenStore = new MemoryTokenStore();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -69,10 +80,13 @@ app.get("/auth/status", (_req, res) => {
 const registerSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
 const refreshSchema = z.object({ refreshToken: z.string().min(1) });
+const verifyEmailSchema = z.object({ token: z.string().min(1) });
+const resetRequestSchema = z.object({ email: z.string().email() });
+const resetCompleteSchema = z.object({ token: z.string().min(1), password: z.string().min(8) });
 
 // ── Register ──────────────────────────────────────────────────────────────────
 
-app.post("/auth/register", async (req, res) => {
+app.post("/auth/register", registerRateLimit, async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
     const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
@@ -98,14 +112,50 @@ app.post("/auth/register", async (req, res) => {
   };
   accounts.set(account.id, account);
 
+  // Issue verification token (log for local dev; swap for email transport in production)
+  const verifyToken = tokenStore.issue(account.id, "verify");
+  if (env.APP_ENV !== "test") {
+    console.log(`[dev] verify token for ${email}: ${verifyToken}`);
+  }
+
   const pub = toPublic(account);
   const body: RegisterResponse = { id: pub.id, email: pub.email, verified: pub.verified, createdAt: pub.createdAt.toISOString() };
   res.status(201).json(body);
 });
 
+// ── Email verification ────────────────────────────────────────────────────────
+
+app.post("/auth/verify-email", verifyResendRateLimit, (req, res) => {
+  const parsed = verifyEmailSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
+    res.status(400).json(err);
+    return;
+  }
+
+  const accountId = tokenStore.consume(parsed.data.token, "verify");
+  if (!accountId) {
+    const err: AuthErrorResponse = { code: "INVALID_TOKEN", message: "Verification token is invalid or expired." };
+    res.status(400).json(err);
+    return;
+  }
+
+  const account = accounts.get(accountId);
+  if (!account) {
+    const err: AuthErrorResponse = { code: "INVALID_TOKEN", message: "Verification token is invalid or expired." };
+    res.status(400).json(err);
+    return;
+  }
+
+  account.verified = true;
+  account.updatedAt = new Date();
+  const body: VerifyEmailResponse = { message: "Email verified." };
+  res.status(200).json(body);
+});
+
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-app.post("/auth/login", async (req, res) => {
+app.post("/auth/login", loginRateLimit, async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
@@ -149,6 +199,65 @@ app.post("/auth/refresh", (req, res) => {
 
   const rotated = sessionStore.rotate(existing.sessionId);
   const body: RefreshResponse = { accessToken: rotated.sessionId, refreshToken: rotated.refreshToken };
+  res.status(200).json(body);
+});
+
+// ── Password reset — request ──────────────────────────────────────────────────
+
+// Always returns the same shape to prevent account enumeration.
+app.post("/auth/password-reset/request", resetRateLimit, (req, res) => {
+  const parsed = resetRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
+    res.status(400).json(err);
+    return;
+  }
+
+  const account = [...accounts.values()].find((a) => a.email === parsed.data.email);
+  if (account) {
+    const resetToken = tokenStore.issue(account.id, "reset");
+    if (env.APP_ENV !== "test") {
+      console.log(`[dev] reset token for ${account.email}: ${resetToken}`);
+    }
+  }
+
+  const body: PasswordResetRequestResponse = {
+    message: "If that email is registered you will receive a reset link shortly."
+  };
+  res.status(200).json(body);
+});
+
+// ── Password reset — completion ───────────────────────────────────────────────
+
+app.post("/auth/password-reset/complete", resetRateLimit, async (req, res) => {
+  const parsed = resetCompleteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
+    res.status(400).json(err);
+    return;
+  }
+
+  const accountId = tokenStore.consume(parsed.data.token, "reset");
+  if (!accountId) {
+    const err: AuthErrorResponse = { code: "INVALID_TOKEN", message: "Reset token is invalid or expired." };
+    res.status(400).json(err);
+    return;
+  }
+
+  const account = accounts.get(accountId);
+  if (!account) {
+    const err: AuthErrorResponse = { code: "INVALID_TOKEN", message: "Reset token is invalid or expired." };
+    res.status(400).json(err);
+    return;
+  }
+
+  account.passwordHash = await hashPassword(parsed.data.password);
+  account.updatedAt = new Date();
+
+  // Revoke all sessions so stale credentials cannot be replayed.
+  sessionStore.revokeAll(accountId);
+
+  const body: PasswordResetCompleteResponse = { message: "Password updated. Please log in again." };
   res.status(200).json(body);
 });
 
