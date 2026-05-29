@@ -71,6 +71,10 @@ The initial scaffold intentionally keeps secrets and third-party dependencies mi
 
 This repo is being prepared for public contributors. Keep changes scoped, document new environment variables, and prefer shared contracts in `packages/types` when multiple apps need the same shape.
 
+## Contributor planning docs
+
+- [API to Stellar service trust handshake](docs/service-trust-handshake.md)
+
 ## License
 
 MIT
