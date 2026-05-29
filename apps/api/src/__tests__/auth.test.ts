@@ -544,3 +544,46 @@ describe("auth response envelope shape", () => {
     expect(res.body.account).not.toHaveProperty("passwordHash");
   });
 });
+
+// ── auth metrics (issue #341) ─────────────────────────────────────────────────
+
+import { resetMetrics } from "../app.js";
+
+describe("GET /auth/metrics", () => {
+  beforeEach(() => resetMetrics());
+
+  it("returns empty counters before any auth activity", async () => {
+    const res = await request(app).get("/auth/metrics");
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty("counters");
+    expect(res.body).toHaveProperty("avg_duration_ms");
+  });
+
+  it("increments register.success after a successful registration", async () => {
+    await request(app).post("/auth/register").send({ email: "metrics1@example.com", password: "password123" });
+    const res = await request(app).get("/auth/metrics");
+    expect(res.body.counters["auth.register.success"]).toBe(1);
+  });
+
+  it("increments register.failure on duplicate email", async () => {
+    await request(app).post("/auth/register").send({ email: "metrics2@example.com", password: "password123" });
+    await request(app).post("/auth/register").send({ email: "metrics2@example.com", password: "password123" });
+    const res = await request(app).get("/auth/metrics");
+    expect(res.body.counters["auth.register.failure"]).toBeGreaterThanOrEqual(1);
+  });
+
+  it("increments login.success and login.failure", async () => {
+    await request(app).post("/auth/register").send({ email: "metrics3@example.com", password: "password123" });
+    await request(app).post("/auth/login").send({ email: "metrics3@example.com", password: "password123" });
+    await request(app).post("/auth/login").send({ email: "metrics3@example.com", password: "wrong" });
+    const res = await request(app).get("/auth/metrics");
+    expect(res.body.counters["auth.login.success"]).toBe(1);
+    expect(res.body.counters["auth.login.failure"]).toBeGreaterThanOrEqual(1);
+  });
+
+  it("records avg_duration_ms for instrumented endpoints", async () => {
+    await request(app).post("/auth/register").send({ email: "metrics4@example.com", password: "password123" });
+    const res = await request(app).get("/auth/metrics");
+    expect(typeof res.body.avg_duration_ms["register"]).toBe("number");
+  });
+});
