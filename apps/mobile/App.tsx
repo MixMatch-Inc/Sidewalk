@@ -33,6 +33,7 @@ type Route =
   | { name: "forgotPassword" }
   | { name: "resetPassword"; token?: string }
   | { name: "verificationPending"; email?: string }
+  | { name: "onboarding"; email: string }
   | { name: "home" };
 
 type AuthState =
@@ -220,6 +221,16 @@ export default function App() {
         onBackToLogin={() => {
           handleLogout();
         }}
+      />
+    );
+  }
+
+  // #385: new verified accounts land on onboarding before the main shell
+  if (route.name === "onboarding") {
+    return (
+      <OnboardingScreen
+        email={route.email}
+        onContinue={() => setRoute({ name: "home" })}
       />
     );
   }
@@ -494,6 +505,27 @@ function HomeScreen(props: { email: string; verified: boolean; onLogout: () => v
         <Text style={styles.noticeSuccessText}>{props.email}</Text>
       </View>
       <PrimaryButton label="Sign out" onPress={props.onLogout} />
+    </ScreenShell>
+  );
+}
+
+// #385 – first landing screen for newly created accounts.
+// This is a stub; onboarding steps (profile setup, tour, etc.) are added here.
+function OnboardingScreen(props: { email: string; onContinue: () => void }) {
+  return (
+    <ScreenShell
+      title="Welcome to Sidewalk"
+      subtitle="You’re all set. Let’s get you oriented before you dive in."
+    >
+      <View style={styles.noticeInfo}>
+        <Text style={styles.noticeInfoText}>
+          Signed in as {props.email}
+        </Text>
+      </View>
+      <Text style={styles.body}>
+        Onboarding steps will appear here. For now, continue to the app.
+      </Text>
+      <PrimaryButton label="Continue" onPress={props.onContinue} />
     </ScreenShell>
   );
 }

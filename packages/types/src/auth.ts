@@ -78,3 +78,44 @@ export type AuthErrorResponse = {
   code: AuthErrorCode;
   message: string;
 };
+
+// ── Shared domain types ───────────────────────────────────────────────────────
+
+/**
+ * The public account shape shared across web, mobile, and API.
+ * Contains only client-safe fields — no password hashes or internal flags.
+ */
+export type AuthUser = {
+  id: string;
+  email: string;
+  verified: boolean;
+};
+
+/**
+ * Client-safe session payload: the user identity plus opaque tokens.
+ * This is the canonical shape clients store and pass to authenticated requests.
+ */
+export type AuthSessionPayload = SessionTokens & {
+  user: AuthUser;
+};
+
+/**
+ * Discriminated union representing the three possible auth states in any
+ * client (web, mobile). Use this as the single source of truth for
+ * auth-gated navigation and UI rendering.
+ */
+export type AuthState =
+  | { status: "loading" }
+  | { status: "signedOut" }
+  | { status: "unverified"; session: AuthSessionPayload }
+  | { status: "signedIn"; session: AuthSessionPayload };
+
+/**
+ * Represents the first post-authentication landing decision.
+ * Consumers pick between directing a new user to onboarding vs a returning
+ * user to their dashboard.
+ */
+export type AuthLandingContext = {
+  user: AuthUser;
+  isNewAccount: boolean;
+};
