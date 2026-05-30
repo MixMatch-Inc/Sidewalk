@@ -4,9 +4,9 @@ import { useState, type ReactElement, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import type {
   PasswordResetCompleteRequest,
-  PasswordResetCompleteResponse,
-  AuthErrorResponse,
 } from "@sidewalk/types";
+import { authMessages } from "../../lib/authCopy";
+import { completePasswordReset } from "../../lib/authClient";
 
 type State = "idle" | "loading" | "done" | "invalid" | "error";
 
@@ -23,7 +23,7 @@ export default function ResetPasswordPage(): ReactElement {
     const confirm = (els.namedItem("confirm") as HTMLInputElement).value;
 
     if (password !== confirm) {
-      setErrorMsg("Passwords do not match.");
+      setErrorMsg(authMessages.resetPassword.complete.mismatchError);
       setState("error");
       return;
     }
@@ -31,47 +31,32 @@ export default function ResetPasswordPage(): ReactElement {
     setState("loading");
     const body: PasswordResetCompleteRequest = { token, password };
 
-    try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/password-reset/complete`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      );
-
-      if (!res.ok) {
-        const err: AuthErrorResponse = await res.json();
-        if (err.code === "INVALID_TOKEN" || err.code === "TOKEN_EXPIRED") {
-          setState("invalid");
-        } else {
-          setErrorMsg(err.message);
-          setState("error");
-        }
-        return;
+    const result = await completePasswordReset(body);
+    if (!result.ok) {
+      if (
+        result.error.code === "INVALID_TOKEN" ||
+        result.error.code === "TOKEN_EXPIRED"
+      ) {
+        setState("invalid");
+      } else {
+        setErrorMsg(result.error.message ?? authMessages.genericError);
+        setState("error");
       }
-
-      const _data: PasswordResetCompleteResponse = await res.json();
-      setState("done");
-    } catch {
-      setErrorMsg("Something went wrong. Please try again.");
-      setState("error");
+      return;
     }
+
+    setState("done");
   }
 
   if (state === "done") {
     return (
       <main className="page-shell">
         <div className="auth-card">
-          <p className="eyebrow">All set</p>
-          <h1 className="auth-heading">Password updated</h1>
-          <p className="auth-body">
-            Your password has been changed. You can now sign in with your new
-            credentials.
-          </p>
+          <p className="eyebrow">{authMessages.resetPassword.completeDone.eyebrow}</p>
+          <h1 className="auth-heading">{authMessages.resetPassword.completeDone.heading}</h1>
+          <p className="auth-body">{authMessages.resetPassword.completeDone.body}</p>
           <a href="/login" className="auth-button auth-button--inline">
-            Go to sign in
+            {authMessages.resetPassword.completeDone.cta}
           </a>
         </div>
       </main>
@@ -82,14 +67,11 @@ export default function ResetPasswordPage(): ReactElement {
     return (
       <main className="page-shell">
         <div className="auth-card">
-          <p className="eyebrow">Link problem</p>
-          <h1 className="auth-heading">This link is no longer valid</h1>
-          <p className="auth-body">
-            Reset links expire after 1 hour and can only be used once. Request
-            a new one to continue.
-          </p>
+          <p className="eyebrow">{authMessages.resetPassword.invalidLink.eyebrow}</p>
+          <h1 className="auth-heading">{authMessages.resetPassword.invalidLink.heading}</h1>
+          <p className="auth-body">{authMessages.resetPassword.invalidLink.body}</p>
           <a href="/forgot-password" className="auth-button auth-button--inline">
-            Request a new link
+            {authMessages.resetPassword.invalidLink.cta}
           </a>
         </div>
       </main>
@@ -99,12 +81,12 @@ export default function ResetPasswordPage(): ReactElement {
   return (
     <main className="page-shell">
       <div className="auth-card">
-        <p className="eyebrow">Account recovery</p>
-        <h1 className="auth-heading">Choose a new password</h1>
+        <p className="eyebrow">{authMessages.resetPassword.complete.eyebrow}</p>
+        <h1 className="auth-heading">{authMessages.resetPassword.complete.heading}</h1>
 
         <form onSubmit={handleSubmit} className="auth-form" noValidate>
           <label className="auth-label" htmlFor="password">
-            New password
+            {authMessages.resetPassword.complete.passwordLabel}
           </label>
           <input
             id="password"
@@ -118,7 +100,7 @@ export default function ResetPasswordPage(): ReactElement {
           />
 
           <label className="auth-label" htmlFor="confirm">
-            Confirm password
+            {authMessages.resetPassword.complete.confirmLabel}
           </label>
           <input
             id="confirm"
@@ -141,7 +123,9 @@ export default function ResetPasswordPage(): ReactElement {
             className="auth-button"
             disabled={state === "loading"}
           >
-            {state === "loading" ? "Saving…" : "Set new password"}
+            {state === "loading"
+              ? authMessages.resetPassword.complete.submitLoading
+              : authMessages.resetPassword.complete.submitIdle}
           </button>
         </form>
       </div>
