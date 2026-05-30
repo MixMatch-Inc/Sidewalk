@@ -10,7 +10,7 @@
     "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
-    "zod": "^3.24.1"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
