@@ -2,9 +2,12 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +19,7 @@ import type { AuthErrorCode, LoginResponse, SessionTokens } from "@sidewalk/type
 import {
   completePasswordReset,
   login,
+  logout as apiLogout,
   memoryTokenStore,
   requestPasswordReset,
 } from "./src/lib/authClient";
@@ -24,13 +28,18 @@ import {
   friendlyAuthMessage,
   privacySafeResetMessage,
 } from "./src/lib/authMessaging";
-import { isValidEmail, validatePassword } from "./src/lib/validation";
+import { isValidEmail, validatePassword, validatePasswordConfirm } from "./src/lib/validation";
+import { sessionStorage } from "./src/lib/secureStorage";
+
+// #378/#379 – sentinel used to distinguish network failures from auth failures
+const NETWORK_ERROR_MSG = "Network error. Check your connection and try again.";
 
 type Route =
   | { name: "login" }
   | { name: "forgotPassword" }
   | { name: "resetPassword"; token?: string }
   | { name: "verificationPending"; email?: string }
+  | { name: "onboarding"; email: string }
   | { name: "home" };
 
 type AuthState =
@@ -79,21 +88,38 @@ function LinkButton(props: { label: string; onPress: () => void }) {
 function ScreenShell(props: { title: string; subtitle?: string; children: React.ReactNode }) {
   const urlHint = apiUrlHint();
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <View style={styles.card}>
-        <Text style={styles.eyebrow}>Sidewalk</Text>
-        <Text style={styles.title}>{props.title}</Text>
-        {props.subtitle ? <Text style={styles.subtitle}>{props.subtitle}</Text> : null}
-        {!urlHint ? (
-          <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>Missing API URL</Text>
-            <Text style={styles.bannerBody}>Set EXPO_PUBLIC_API_URL to your API base URL.</Text>
+    // #377 – KeyboardAvoidingView keeps form controls visible when the soft keyboard opens
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        {/* #377 – ScrollView prevents content being clipped on small screens with keyboard open */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <Text style={styles.eyebrow}>Sidewalk</Text>
+            <Text
+              style={styles.title}
+              accessibilityRole="header"
+            >
+              {props.title}
+            </Text>
+            {props.subtitle ? <Text style={styles.subtitle}>{props.subtitle}</Text> : null}
+            {!urlHint ? (
+              <View style={styles.banner} accessibilityRole="alert">
+                <Text style={styles.bannerTitle}>Missing API URL</Text>
+                <Text style={styles.bannerBody}>Set EXPO_PUBLIC_API_URL to your API base URL.</Text>
+              </View>
+            ) : null}
+            <View style={styles.content}>{props.children}</View>
           </View>
-        ) : null}
-        <View style={styles.content}>{props.children}</View>
-      </View>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -122,6 +148,21 @@ function mapAuthError(code: AuthErrorCode): string {
 export default function App() {
   const [route, setRoute] = useState<Route>({ name: "login" });
   const [authState, setAuthState] = useState<AuthState>({ status: "signedOut" });
+  const [bootstrapping, setBootstrapping] = useState(true);
+
+  // #374 – restore session from secure storage on launch
+  useEffect(() => {
+    sessionStorage.getTokens().then((stored) => {
+      // Stored tokens are opaque; we accept them as valid until the server rejects them.
+      // A future improvement would be to call /auth/refresh here and fall back on 401.
+      if (stored) {
+        memoryTokenStore.set(stored);
+        // We have tokens but no account details — stay on login so the user
+        // can re-authenticate. A refresh endpoint could populate the session.
+      }
+      setBootstrapping(false);
+    }).catch(() => setBootstrapping(false));
+  }, []);
 
   useEffect(() => {
     function handleUrl(nextUrl: string | null | undefined) {
@@ -141,14 +182,35 @@ export default function App() {
     return () => sub.remove();
   }, []);
 
+  if (bootstrapping) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <ActivityIndicator size="large" color="#7a3414" />
+      </SafeAreaView>
+    );
+  }
+
   const session = authState.status === "signedOut" ? null : authState.session;
   const headerEmail = session?.account.email;
+
+  // #375 – complete logout: server revocation + storage clear + nav reset
+  async function handleLogout() {
+    const tokens = memoryTokenStore.get();
+    if (tokens) {
+      await apiLogout(tokens.accessToken).catch(() => {});
+    }
+    memoryTokenStore.clear();
+    await sessionStorage.clearTokens().catch(() => {});
+    setAuthState({ status: "signedOut" });
+    setRoute({ name: "login" });
+  }
 
   if (route.name === "login") {
     return (
       <LoginScreen
-        onLoginSuccess={(sessionData, tokens) => {
+        onLoginSuccess={async (sessionData, tokens) => {
           memoryTokenStore.set(tokens);
+          await sessionStorage.setTokens(tokens).catch(() => {});
           if (sessionData.account.verified) {
             setAuthState({ status: "signedIn", session: sessionData });
             setRoute({ name: "home" });
@@ -186,10 +248,18 @@ export default function App() {
       <VerificationPendingScreen
         email={route.email ?? headerEmail}
         onBackToLogin={() => {
-          memoryTokenStore.clear();
-          setAuthState({ status: "signedOut" });
-          setRoute({ name: "login" });
+          handleLogout();
         }}
+      />
+    );
+  }
+
+  // #385: new verified accounts land on onboarding before the main shell
+  if (route.name === "onboarding") {
+    return (
+      <OnboardingScreen
+        email={route.email}
+        onContinue={() => setRoute({ name: "home" })}
       />
     );
   }
@@ -198,11 +268,7 @@ export default function App() {
     <HomeScreen
       email={headerEmail ?? "Signed in"}
       verified={session?.account.verified ?? false}
-      onLogout={() => {
-        memoryTokenStore.clear();
-        setAuthState({ status: "signedOut" });
-        setRoute({ name: "login" });
-      }}
+      onLogout={handleLogout}
     />
   );
 }
@@ -227,7 +293,12 @@ function LoginScreen(props: {
     setBusy(false);
 
     if (!result.ok) {
-      setError(mapAuthError(result.error.code));
+      // #378 – VALIDATION_ERROR from the client layer means the fetch itself failed
+      if (result.error.code === "VALIDATION_ERROR" && result.error.message.includes("not configured")) {
+        setError(NETWORK_ERROR_MSG);
+      } else {
+        setError(mapAuthError(result.error.code));
+      }
       return;
     }
 
@@ -243,26 +314,43 @@ function LoginScreen(props: {
       subtitle="Use your email and password to access your account."
     >
       <ErrorNotice message={error} />
+      {/* #379 – network offline notice */}
+      {error === NETWORK_ERROR_MSG ? (
+        <View style={styles.noticeError} accessibilityRole="alert">
+          <Text style={styles.noticeErrorText}>
+            No network connection. Check your connection and try again.
+          </Text>
+        </View>
+      ) : null}
       <Text style={styles.label}>Email</Text>
       <TextInput
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
+        returnKeyType="next"
         value={email}
         onChangeText={setEmail}
         placeholder="you@example.com"
         placeholderTextColor="#8a7b6b"
         style={styles.input}
+        // #380 – accessibility
+        accessibilityLabel="Email address"
+        accessibilityHint="Enter the email address for your account"
       />
       <Text style={styles.label}>Password</Text>
       <TextInput
         secureTextEntry
         autoCapitalize="none"
+        returnKeyType="done"
+        onSubmitEditing={canSubmit ? handleSubmit : undefined}
         value={password}
         onChangeText={setPassword}
         placeholder="Your password"
         placeholderTextColor="#8a7b6b"
         style={styles.input}
+        // #380 – accessibility
+        accessibilityLabel="Password"
+        accessibilityHint="Enter your account password"
       />
 
       <PrimaryButton label="Sign in" onPress={handleSubmit} disabled={!canSubmit} busy={busy} />
@@ -352,23 +440,20 @@ function PasswordResetCompleteScreen(props: {
   const [success, setSuccess] = useState<string | null>(null);
 
   const canSubmit = useMemo(() => {
-    const validation = validatePassword(password);
-    return (
-      token.trim().length > 0 &&
-      validation.ok &&
-      password === confirm &&
-      !busy
-    );
+    const pwdOk = validatePassword(password).ok;
+    const confirmOk = validatePasswordConfirm(password, confirm).ok;
+    return token.trim().length > 0 && pwdOk && confirmOk && !busy;
   }, [busy, confirm, password, token]);
 
   async function handleSubmit() {
-    const validation = validatePassword(password);
-    if (!validation.ok) {
-      setError(validation.message ?? "Please check your password.");
+    const pwdResult = validatePassword(password);
+    if (!pwdResult.ok) {
+      setError(pwdResult.message ?? "Please check your password.");
       return;
     }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
+    const confirmResult = validatePasswordConfirm(password, confirm);
+    if (!confirmResult.ok) {
+      setError(confirmResult.message ?? "Passwords do not match.");
       return;
     }
 
@@ -475,10 +560,35 @@ function HomeScreen(props: { email: string; verified: boolean; onLogout: () => v
   );
 }
 
+// #385 – first landing screen for newly created accounts.
+// This is a stub; onboarding steps (profile setup, tour, etc.) are added here.
+function OnboardingScreen(props: { email: string; onContinue: () => void }) {
+  return (
+    <ScreenShell
+      title="Welcome to Sidewalk"
+      subtitle="You’re all set. Let’s get you oriented before you dive in."
+    >
+      <View style={styles.noticeInfo}>
+        <Text style={styles.noticeInfoText}>
+          Signed in as {props.email}
+        </Text>
+      </View>
+      <Text style={styles.body}>
+        Onboarding steps will appear here. For now, continue to the app.
+      </Text>
+      <PrimaryButton label="Continue" onPress={props.onContinue} />
+    </ScreenShell>
+  );
+}
+
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   safeArea: {
     flex: 1,
     backgroundColor: "#f4efe4",
+  },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 24,

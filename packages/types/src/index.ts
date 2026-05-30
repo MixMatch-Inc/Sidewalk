@@ -1,4 +1,5 @@
 export * from "./auth.js";
+export * from "./fixtures/authFixtures.js";
 
 export type ApiHealth = {
   service: "api" | "stellar-service";

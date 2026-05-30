@@ -128,8 +128,6 @@ export function completePasswordReset(
   );
 }
 
-// #383 – complete the mobile auth client surface to mirror API contracts
-
 export function register(
   body: RegisterRequest
 ): Promise<AuthResult<RegisterResponse>> {
@@ -139,7 +137,10 @@ export function register(
 export function verifyEmail(
   body: VerifyEmailRequest
 ): Promise<AuthResult<VerifyEmailResponse>> {
-  return authRequest<VerifyEmailResponse, VerifyEmailRequest>("/auth/verify-email", body);
+  return authRequest<VerifyEmailResponse, VerifyEmailRequest>(
+    "/auth/verify-email",
+    body
+  );
 }
 
 export async function logout(accessToken: string): Promise<AuthResult<LogoutResponse>> {
@@ -152,8 +153,11 @@ export async function logout(accessToken: string): Promise<AuthResult<LogoutResp
       },
       body: JSON.stringify({}),
     });
-    if (!res.ok) return { ok: false, error: await parseAuthError(res) };
-    return { ok: true, data: (await res.json()) as LogoutResponse };
+    if (!res.ok) {
+      return { ok: false, error: await parseAuthError(res) };
+    }
+    const data = (await res.json()) as LogoutResponse;
+    return { ok: true, data };
   } catch {
     return { ok: false, error: UNKNOWN_ERROR };
   }
