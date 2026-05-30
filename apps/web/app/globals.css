@@ -31,6 +31,12 @@ body {
   padding: 72px 24px 96px;
 }
 
+.signout-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
 .hero {
   max-width: 720px;
 }
@@ -237,4 +243,20 @@ body {
   display: inline-block;
   margin-top: 20px;
   text-decoration: none;
+}
+
+.auth-button--ghost {
+  background: transparent;
+  color: var(--accent-strong);
+  border: 1px solid var(--border);
+}
+
+.auth-button--ghost:hover:not(:disabled) {
+  background: rgba(177, 92, 43, 0.08);
+}
+
+.signout-error {
+  margin-left: 12px;
+  margin-bottom: 0;
+  align-self: center;
 }

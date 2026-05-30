@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import SignOutControl from "./signout-control";
 
 const workspaces = [
   {
@@ -34,6 +35,7 @@ const milestones = [
 export default function HomePage(): ReactElement {
   return (
     <main className="page-shell">
+      <SignOutControl />
       <section className="hero">
         <p className="eyebrow">Open Source Hackathon Starter</p>
         <h1>Sidewalk is being rebuilt from a clean foundation.</h1>

@@ -71,3 +71,37 @@ export async function getAuthHeader(): Promise<Record<string, string> | null> {
   }
   return token ? { Authorization: `Bearer ${token}` } : null;
 }
+
+export async function logout(): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const authHeader = await getAuthHeader();
+    if (!authHeader) {
+      clearTokens();
+      return { ok: true };
+    }
+
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/logout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader,
+      },
+    });
+
+    if (!res.ok) {
+      let message = "Unable to sign out right now.";
+      try {
+        const data = (await res.json()) as { message?: string };
+        if (typeof data.message === "string") message = data.message;
+      } catch {
+        // Keep fallback message.
+      }
+      return { ok: false, message };
+    }
+
+    clearTokens();
+    return { ok: true };
+  } catch {
+    return { ok: false, message: "Network error. Please try again." };
+  }
+}
