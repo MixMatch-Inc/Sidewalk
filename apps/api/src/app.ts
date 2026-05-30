@@ -30,6 +30,7 @@ import {
   resetRateLimit,
   verifyResendRateLimit
 } from "./middleware/authRateLimit.js";
+import { recordAuthEvent, getMetrics } from "./services/authMetrics.js";
 
 const env = readServiceEnv(
   "api",
@@ -93,8 +94,10 @@ const resetCompleteSchema = z.object({ token: z.string().min(1), password: z.str
 // ── Register ──────────────────────────────────────────────────────────────────
 
 app.post("/auth/register", registerRateLimit, async (req, res) => {
+  const t0 = Date.now();
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) {
+    recordAuthEvent("register", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
     res.status(400).json(err);
     return;
@@ -102,6 +105,7 @@ app.post("/auth/register", registerRateLimit, async (req, res) => {
 
   const { email, password } = parsed.data;
   if ([...accounts.values()].some((a) => a.email === email)) {
+    recordAuthEvent("register", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "EMAIL_TAKEN", message: "Email already registered." };
     res.status(409).json(err);
     return;
@@ -124,6 +128,7 @@ app.post("/auth/register", registerRateLimit, async (req, res) => {
     console.log(`[dev] verify token for ${email}: ${verifyToken}`);
   }
 
+  recordAuthEvent("register", "success", Date.now() - t0);
   const pub = toPublic(account);
   const body: RegisterResponse = { id: pub.id, email: pub.email, verified: pub.verified, createdAt: pub.createdAt.toISOString() };
   res.status(201).json(body);
@@ -132,8 +137,10 @@ app.post("/auth/register", registerRateLimit, async (req, res) => {
 // ── Email verification ────────────────────────────────────────────────────────
 
 app.post("/auth/verify-email", verifyResendRateLimit, (req, res) => {
+  const t0 = Date.now();
   const parsed = verifyEmailSchema.safeParse(req.body);
   if (!parsed.success) {
+    recordAuthEvent("verify_email", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
     res.status(400).json(err);
     return;
@@ -141,6 +148,7 @@ app.post("/auth/verify-email", verifyResendRateLimit, (req, res) => {
 
   const accountId = tokenStore.consume(parsed.data.token, "verify");
   if (!accountId) {
+    recordAuthEvent("verify_email", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "INVALID_TOKEN", message: "Verification token is invalid or expired." };
     res.status(400).json(err);
     return;
@@ -148,6 +156,7 @@ app.post("/auth/verify-email", verifyResendRateLimit, (req, res) => {
 
   const account = accounts.get(accountId);
   if (!account) {
+    recordAuthEvent("verify_email", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "INVALID_TOKEN", message: "Verification token is invalid or expired." };
     res.status(400).json(err);
     return;
@@ -155,6 +164,7 @@ app.post("/auth/verify-email", verifyResendRateLimit, (req, res) => {
 
   account.verified = true;
   account.updatedAt = new Date();
+  recordAuthEvent("verify_email", "success", Date.now() - t0);
   const body: VerifyEmailResponse = { message: "Email verified." };
   res.status(200).json(body);
 });
@@ -162,8 +172,10 @@ app.post("/auth/verify-email", verifyResendRateLimit, (req, res) => {
 // ── Login ─────────────────────────────────────────────────────────────────────
 
 app.post("/auth/login", loginRateLimit, async (req, res) => {
+  const t0 = Date.now();
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
+    recordAuthEvent("login", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
     res.status(400).json(err);
     return;
@@ -176,6 +188,7 @@ app.post("/auth/login", loginRateLimit, async (req, res) => {
   // Check lockout before verifying password to avoid timing leaks
   if (account && lockoutService.isLocked(account.id)) {
     suspiciousLoginLogger.record({ timestamp: new Date().toISOString(), email, ip, reason: "ACCOUNT_LOCKED" });
+    recordAuthEvent("login", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "ACCOUNT_LOCKED", message: "Account temporarily locked. Please try again later." };
     res.status(403).json(err);
     return;
@@ -186,6 +199,7 @@ app.post("/auth/login", loginRateLimit, async (req, res) => {
       lockoutService.recordFailure(account.id);
     }
     suspiciousLoginLogger.record({ timestamp: new Date().toISOString(), email, ip, reason: "INVALID_CREDENTIALS" });
+    recordAuthEvent("login", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "INVALID_CREDENTIALS", message: "Invalid email or password." };
     res.status(401).json(err);
     return;
@@ -193,6 +207,7 @@ app.post("/auth/login", loginRateLimit, async (req, res) => {
 
   lockoutService.recordSuccess(account.id);
   const session = sessionStore.create(account.id);
+  recordAuthEvent("login", "success", Date.now() - t0);
   const body: LoginResponse = {
     accessToken: session.sessionId,
     refreshToken: session.refreshToken,
@@ -227,8 +242,10 @@ app.post("/auth/refresh", (req, res) => {
 
 // Always returns the same shape to prevent account enumeration.
 app.post("/auth/password-reset/request", resetRateLimit, (req, res) => {
+  const t0 = Date.now();
   const parsed = resetRequestSchema.safeParse(req.body);
   if (!parsed.success) {
+    recordAuthEvent("password_reset", "failure", Date.now() - t0);
     const err: AuthErrorResponse = { code: "VALIDATION_ERROR", message: parsed.error.issues[0].message };
     res.status(400).json(err);
     return;
@@ -242,6 +259,7 @@ app.post("/auth/password-reset/request", resetRateLimit, (req, res) => {
     }
   }
 
+  recordAuthEvent("password_reset", "success", Date.now() - t0);
   const body: PasswordResetRequestResponse = {
     message: "If that email is registered you will receive a reset link shortly."
   };
@@ -326,4 +344,11 @@ app.post("/auth/logout/all", (req, res) => {
   res.status(200).json(body);
 });
 
+// ── Auth metrics ──────────────────────────────────────────────────────────────
+
+app.get("/auth/metrics", (_req, res) => {
+  res.json(getMetrics());
+});
+
 export { env };
+export { resetMetrics } from "./services/authMetrics.js";
