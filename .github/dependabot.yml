@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      # Auth-critical: review PRs for these manually before merging.
+      auth-critical:
+        patterns:
+          - bcrypt
+          - bcryptjs
+          - jsonwebtoken
+          - jose
+          - passport*
+          - express-session
+          - cookie*
+          - cors
+          - helmet
+          - zod
+    ignore:
+      # Pin major versions for auth libs; bump intentionally after review.
+      - dependency-name: bcryptjs
+        update-types: ["version-update:semver-major"]
+      - dependency-name: jose
+        update-types: ["version-update:semver-major"]
