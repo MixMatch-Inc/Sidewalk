@@ -2,9 +2,12 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Linking,
+  Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -27,6 +30,9 @@ import {
 } from "./src/lib/authMessaging";
 import { isValidEmail, validatePassword, validatePasswordConfirm } from "./src/lib/validation";
 import { sessionStorage } from "./src/lib/secureStorage";
+
+// #378/#379 – sentinel used to distinguish network failures from auth failures
+const NETWORK_ERROR_MSG = "Network error. Check your connection and try again.";
 
 type Route =
   | { name: "login" }
@@ -82,21 +88,38 @@ function LinkButton(props: { label: string; onPress: () => void }) {
 function ScreenShell(props: { title: string; subtitle?: string; children: React.ReactNode }) {
   const urlHint = apiUrlHint();
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <View style={styles.card}>
-        <Text style={styles.eyebrow}>Sidewalk</Text>
-        <Text style={styles.title}>{props.title}</Text>
-        {props.subtitle ? <Text style={styles.subtitle}>{props.subtitle}</Text> : null}
-        {!urlHint ? (
-          <View style={styles.banner}>
-            <Text style={styles.bannerTitle}>Missing API URL</Text>
-            <Text style={styles.bannerBody}>Set EXPO_PUBLIC_API_URL to your API base URL.</Text>
+    // #377 – KeyboardAvoidingView keeps form controls visible when the soft keyboard opens
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    >
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        {/* #377 – ScrollView prevents content being clipped on small screens with keyboard open */}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.card}>
+            <Text style={styles.eyebrow}>Sidewalk</Text>
+            <Text
+              style={styles.title}
+              accessibilityRole="header"
+            >
+              {props.title}
+            </Text>
+            {props.subtitle ? <Text style={styles.subtitle}>{props.subtitle}</Text> : null}
+            {!urlHint ? (
+              <View style={styles.banner} accessibilityRole="alert">
+                <Text style={styles.bannerTitle}>Missing API URL</Text>
+                <Text style={styles.bannerBody}>Set EXPO_PUBLIC_API_URL to your API base URL.</Text>
+              </View>
+            ) : null}
+            <View style={styles.content}>{props.children}</View>
           </View>
-        ) : null}
-        <View style={styles.content}>{props.children}</View>
-      </View>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -264,7 +287,12 @@ function LoginScreen(props: {
     setBusy(false);
 
     if (!result.ok) {
-      setError(mapAuthError(result.error.code));
+      // #378 – VALIDATION_ERROR from the client layer means the fetch itself failed
+      if (result.error.code === "VALIDATION_ERROR" && result.error.message.includes("not configured")) {
+        setError(NETWORK_ERROR_MSG);
+      } else {
+        setError(mapAuthError(result.error.code));
+      }
       return;
     }
 
@@ -280,26 +308,43 @@ function LoginScreen(props: {
       subtitle="Use your email and password to access your account."
     >
       <ErrorNotice message={error} />
+      {/* #379 – network offline notice */}
+      {error === NETWORK_ERROR_MSG ? (
+        <View style={styles.noticeError} accessibilityRole="alert">
+          <Text style={styles.noticeErrorText}>
+            No network connection. Check your connection and try again.
+          </Text>
+        </View>
+      ) : null}
       <Text style={styles.label}>Email</Text>
       <TextInput
         autoCapitalize="none"
         autoComplete="email"
         keyboardType="email-address"
+        returnKeyType="next"
         value={email}
         onChangeText={setEmail}
         placeholder="you@example.com"
         placeholderTextColor="#8a7b6b"
         style={styles.input}
+        // #380 – accessibility
+        accessibilityLabel="Email address"
+        accessibilityHint="Enter the email address for your account"
       />
       <Text style={styles.label}>Password</Text>
       <TextInput
         secureTextEntry
         autoCapitalize="none"
+        returnKeyType="done"
+        onSubmitEditing={canSubmit ? handleSubmit : undefined}
         value={password}
         onChangeText={setPassword}
         placeholder="Your password"
         placeholderTextColor="#8a7b6b"
         style={styles.input}
+        // #380 – accessibility
+        accessibilityLabel="Password"
+        accessibilityHint="Enter your account password"
       />
 
       <PrimaryButton label="Sign in" onPress={handleSubmit} disabled={!canSubmit} busy={busy} />
@@ -531,9 +576,13 @@ function OnboardingScreen(props: { email: string; onContinue: () => void }) {
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   safeArea: {
     flex: 1,
     backgroundColor: "#f4efe4",
+  },
+  scrollContent: {
+    flexGrow: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
