@@ -147,6 +147,31 @@ describe("POST /auth/login", () => {
   });
 });
 
+describe("auth privacy and latency baselines", () => {
+  it("password reset request returns same status and shape for known/unknown accounts", async () => {
+    await request(app).post("/auth/register").send({ email: "privacy-known@example.com", password: "password123" });
+
+    const known = await request(app).post("/auth/password-reset/request").send({ email: "privacy-known@example.com" });
+    const unknown = await request(app).post("/auth/password-reset/request").send({ email: "privacy-unknown@example.com" });
+
+    expect(known.status).toBe(200);
+    expect(unknown.status).toBe(200);
+    expect(known.body).toEqual(unknown.body);
+  });
+
+  it("login endpoint responds within demo budget under short burst traffic", async () => {
+    await request(app).post("/auth/register").send({ email: "burst@example.com", password: "password123" });
+    const start = Date.now();
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        request(app).post("/auth/login").send({ email: "burst@example.com", password: "password123" })
+      )
+    );
+    const elapsedMs = Date.now() - start;
+    expect(elapsedMs).toBeLessThan(2000);
+  });
+});
+
 // ── refresh endpoint ──────────────────────────────────────────────────────────
 
 describe("POST /auth/refresh", () => {
