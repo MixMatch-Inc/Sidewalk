@@ -72,7 +72,8 @@ export type AuthErrorCode =
   | "INVALID_TOKEN"
   | "SESSION_NOT_FOUND"
   | "TOKEN_EXPIRED"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "NOT_FOUND";
 
 /**
  * Runtime-usable error code constants (#389).
@@ -93,6 +94,7 @@ export const AUTH_ERROR_CODES = {
   SESSION_NOT_FOUND: "SESSION_NOT_FOUND",
   TOKEN_EXPIRED: "TOKEN_EXPIRED",
   RATE_LIMITED: "RATE_LIMITED",
+  NOT_FOUND: "NOT_FOUND",
 } as const satisfies Record<AuthErrorCode, AuthErrorCode>;
 
 export type AuthErrorResponse = {

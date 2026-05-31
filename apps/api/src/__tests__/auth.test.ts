@@ -333,7 +333,7 @@ describe("POST /auth/password-reset/complete", () => {
 
   it("updates password and revokes sessions on success", async () => {
     const email = "complete1@example.com";
-    const { accountId, resetToken } = await setupReset(email);
+    const { resetToken } = await setupReset(email);
     const loginRes = await request(app).post("/auth/login").send({ email, password: "oldpass123" });
     const { accessToken } = loginRes.body;
 
@@ -438,7 +438,7 @@ describe("auth rate limiting", () => {
     const res = makeRes();
     limiter(makeReq(), res as unknown as Response, () => {});
     expect(res.statusCode).toBe(429);
-    expect((res.body as any).code).toBe("RATE_LIMITED");
+    expect((res.body as { code: string }).code).toBe("RATE_LIMITED");
   });
 
   it("tracks different IPs independently", () => {
@@ -515,7 +515,7 @@ describe("LockoutService", () => {
 
 // ── login lockout integration ─────────────────────────────────────────────────
 
-import { lockoutService, suspiciousLoginLogger } from "../app.js";
+import { suspiciousLoginLogger } from "../app.js";
 
 describe("login lockout and suspicious event logging", () => {
   const email = "lockout@example.com";

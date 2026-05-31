@@ -2,7 +2,9 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
+    "types": ["node"],
     "paths": {
       "@sidewalk/types": ["../../packages/types/src/index.ts"]
     }

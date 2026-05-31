@@ -5,7 +5,7 @@
  * these tests run without a live API instance.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import express from "express";
 import request from "supertest";
 import { makeRequireAuth } from "../middleware/requireAuth.js";
@@ -22,7 +22,7 @@ function buildApp(fetchImpl: typeof fetch) {
 
 // Helpers to build mock fetch responses
 function mockFetch(sessionsOk: boolean, meVerified: boolean | null) {
-  return vi.fn(async (url: string, opts?: RequestInit) => {
+  return vi.fn(async (url: string) => {
     const u = String(url);
     if (u.endsWith("/auth/sessions")) {
       if (!sessionsOk) return new Response(null, { status: 401 });
