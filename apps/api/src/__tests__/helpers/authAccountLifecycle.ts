@@ -15,7 +15,7 @@ import type {
 
 type Http = { status: number; body: unknown };
 
-async function post(app: Express, path: string, body: unknown): Promise<Http> {
+async function post(app: Express, path: string, body: Record<string, unknown>): Promise<Http> {
   const { default: request } = await import("supertest");
   const res = await request(app).post(path).send(body);
   return { status: res.status, body: res.body };

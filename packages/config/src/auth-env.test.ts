@@ -46,8 +46,9 @@ describe('validateAuthEnv', () => {
       assert.fail('expected throw');
     } catch (err) {
       assert.ok(err instanceof Error);
-      assert.match(err.message, /Auth environment invalid/);
-      assert.match(err.message, /JWT/);
+      const error = err as Error;
+      assert.match(error.message, /Auth environment invalid/);
+      assert.match(error.message, /JWT/);
     }
   });
 });

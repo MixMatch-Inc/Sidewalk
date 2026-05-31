@@ -1,81 +1,15 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import { connectDB } from "./config/db";
-import { getApiEnv } from "./config/env";
-import { validateAuthEnv } from "@sidewalk/config";
-import { getLiveness, getReadiness } from "./modules/health/health.controller";
-import { stellarService } from "./config/stellar";
-import reportsRoutes from "./modules/reports/reports.routes";
-import authRoutes from "./modules/auth/auth.routes";
-import mediaRoutes from "./modules/media/media.routes";
-import { startMediaProcessingWorker } from "./modules/media/media.queue";
-import {
-  ensureMediaCleanupSchedule,
-  startMediaCleanupWorker,
-} from "./modules/media/media.cleanup.queue";
-import { startStellarAnchorWorker } from "./modules/reports/reports.anchor.queue";
-import { logger } from "./core/logging/logger";
-import { requestLogger } from "./core/logging/request-logger.middleware";
-import { errorHandler, notFoundHandler } from "./core/errors/error-handler";
-import { tieredApiRateLimiter } from "./core/rate-limit/rate-limit.middleware";
+import { app, env } from "./app.js";
 
-dotenv.config();
-validateAuthEnv();
+const PORT = env.PORT ?? 3001;
 
-const app = express();
-const env = getApiEnv();
-const PORT = env.PORT;
-
-app.set("trust proxy", 1);
-
-// Root level health checks
-app.get("/live", getLiveness);
-app.get("/ready", getReadiness);
-app.get("/api/health", getReadiness);
-
-app.use(cors());
-app.use(express.json());
-app.use(requestLogger);
-app.use("/api", tieredApiRateLimiter);
-app.use("/api/auth", authRoutes);
-app.use("/api/reports", reportsRoutes);
-app.use("/api/media", mediaRoutes);
-app.use(notFoundHandler);
-app.use(errorHandler);
-
-const startServer = async () => {
-  try {
-    await connectDB();
-
-    logger.info("Initializing Stellar service");
-    await stellarService.ensureFunded();
-
-    if (env.ENABLE_MEDIA_WORKER !== "false") {
-      startMediaProcessingWorker();
-      startMediaCleanupWorker();
-      await ensureMediaCleanupSchedule();
-      logger.info("Media workers initialized (processing + orphan cleanup)");
-    }
-
-    if (env.ENABLE_STELLAR_ANCHOR_WORKER !== "false") {
-      startStellarAnchorWorker();
-      logger.info("Stellar anchor worker initialized");
-    }
-
-    app.listen(PORT, () => {
-      logger.info("Server started", { port: PORT });
-    });
-  } catch (error) {
-    logger.error("Server bootstrap failed", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    process.exit(1);
-  }
-};
+app.listen(PORT, () => {
+  console.log(JSON.stringify({ level: "info", message: "API server started", port: PORT }));
+});
 
 process.on("unhandledRejection", (reason) => {
-  logger.error("Unhandled promise rejection", {
+  console.error(JSON.stringify({
+    level: "error",
+    message: "Unhandled promise rejection",
     reason: reason instanceof Error ? reason.message : String(reason),
-  });
+  }));
 });
