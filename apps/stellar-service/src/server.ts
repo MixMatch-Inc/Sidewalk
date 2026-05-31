@@ -4,17 +4,21 @@ import { z } from "zod";
 
 import { readServiceEnv } from "@sidewalk/config";
 import type { ApiHealth, StellarNetworkDetails } from "@sidewalk/types";
+import { makeRequireAuth } from "./middleware/requireAuth.js";
+import { makeWalletRouter } from "./routes/wallet.js";
 
 const env = readServiceEnv(
   "stellar-service",
   z.object({
     PORT: z.coerce.number().default(4010),
     STELLAR_NETWORK: z.enum(["testnet", "mainnet"]).default("testnet"),
-    HORIZON_URL: z.string().url().default("https://horizon-testnet.stellar.org")
+    HORIZON_URL: z.string().url().default("https://horizon-testnet.stellar.org"),
+    API_INTERNAL_URL: z.string().url().default("http://localhost:4000")
   })
 );
 
 const app = express();
+app.use(express.json());
 
 app.get("/health", (_request, response) => {
   const payload: ApiHealth = {
@@ -22,7 +26,6 @@ app.get("/health", (_request, response) => {
     status: "ok",
     timestamp: new Date().toISOString()
   };
-
   response.json(payload);
 });
 
@@ -37,12 +40,14 @@ app.get("/network", async (_request, response, next) => {
         env.STELLAR_NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET,
       baseFee: root
     };
-
     response.json(payload);
   } catch (error) {
     next(error);
   }
 });
+
+const requireAuth = makeRequireAuth(env.API_INTERNAL_URL);
+app.use("/wallet", makeWalletRouter(requireAuth));
 
 app.use((error: unknown, _request: express.Request, response: express.Response) => {
   const message = error instanceof Error ? error.message : "Unknown error";
