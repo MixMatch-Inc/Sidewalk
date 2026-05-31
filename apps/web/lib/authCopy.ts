@@ -3,6 +3,24 @@
  */
 export const authMessages = {
   genericError: "Something went wrong. Please try again.",
+  signup: {
+    eyebrow: "Create your account",
+    heading: "Join Sidewalk",
+    body: "Sidewalk is a civic reporting tool. Your account is used to submit and track reports.",
+    emailLabel: "Email address",
+    passwordLabel: "Password",
+    submitIdle: "Create account",
+    submitLoading: "Creating…",
+    consentNotice: "By creating an account you agree to our Terms of Use and Privacy Policy.",
+    privacyNote: "We use your email only for account verification and recovery. We do not sell your data.",
+  },
+  verify: {
+    eyebrow: "Almost there",
+    heading: "Verify your email",
+    body: "We sent a verification link to your email address. Click it to activate your account.",
+    resendIdle: "Resend verification email",
+    done: "Email verified. You can now sign in.",
+  },
   resetPassword: {
     request: {
       eyebrow: "Account recovery",

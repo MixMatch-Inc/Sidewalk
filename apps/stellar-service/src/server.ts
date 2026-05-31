@@ -5,6 +5,8 @@ import { z } from "zod";
 import { readServiceEnv } from "@sidewalk/config";
 import type { ApiHealth, StellarNetworkDetails } from "@sidewalk/types";
 import { INTERNAL_CLAIMS_HEADER, type InternalAuthClaims } from "@sidewalk/types";
+import { makeRequireAuth } from "./middleware/requireAuth.js";
+import { makeWalletRouter } from "./routes/wallet.js";
 
 const env = readServiceEnv(
   "stellar-service",
@@ -17,6 +19,11 @@ const env = readServiceEnv(
 );
 
 export const app: Express = express();
+    API_INTERNAL_URL: z.string().url().default("http://localhost:4000")
+  })
+);
+
+const app = express();
 app.use(express.json());
 
 // ── Trusted-caller middleware (#414) ──────────────────────────────────────────
@@ -63,6 +70,7 @@ app.get("/health", (_req, res) => {
     timestamp: new Date().toISOString()
   };
   res.json(payload);
+  response.json(payload);
 });
 
 app.get("/network", async (_req, res, next) => {
@@ -77,6 +85,7 @@ app.get("/network", async (_req, res, next) => {
       baseFee
     };
     res.json(payload);
+    response.json(payload);
   } catch (error) {
     next(error);
   }
@@ -93,6 +102,12 @@ app.post("/wallet-intent", requireTrustedCaller, (req, res) => {
   const raw = req.headers[INTERNAL_CLAIMS_HEADER] as string;
   const claims = JSON.parse(raw) as InternalAuthClaims;
   res.status(202).json({ accountId: claims.sub, status: "pending" });
+const requireAuth = makeRequireAuth(env.API_INTERNAL_URL);
+app.use("/wallet", makeWalletRouter(requireAuth));
+
+app.use((error: unknown, _request: express.Request, response: express.Response) => {
+  const message = error instanceof Error ? error.message : "Unknown error";
+  response.status(500).json({ message });
 });
 
 // ── Error handler ─────────────────────────────────────────────────────────────
