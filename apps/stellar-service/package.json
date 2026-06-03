@@ -23,6 +23,6 @@
     "@types/supertest": "6.0.3",
     "supertest": "7.1.0",
     "tsx": "^4.19.4",
-    "vitest": "3.2.2"
+    "vitest": "4.1.8"
   }
 }
