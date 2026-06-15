@@ -3,9 +3,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    globals: false,
+    include: ["src/**/*.test.ts"],
     env: {
-      APP_ENV: "test"
+      DATABASE_URL: "file:./test.db",
+      JWT_SECRET: "test-secret-test-secret"
     }
   }
 });

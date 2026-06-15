@@ -1,17 +1,7 @@
-import { app, env } from "./app.js";
+import { app } from "./app.js";
+import { env } from "./shared/config/env.js";
+import { logger } from "./shared/logger/logger.js";
 
-const PORT = env.PORT ?? 3001;
-
-app.listen(PORT, () => {
-  console.log(JSON.stringify({ level: "info", message: "API server started", port: PORT }));
+app.listen(env.PORT, () => {
+  logger.info(`API listening on port ${env.PORT}`, { env: env.APP_ENV });
 });
-
-process.on("unhandledRejection", (reason) => {
-  console.error(JSON.stringify({
-    level: "error",
-    message: "Unhandled promise rejection",
-    reason: reason instanceof Error ? reason.message : String(reason),
-  }));
-});
-
-startServer();
