@@ -1,20 +1,4 @@
-export type ReportStatus =
-  | "draft"
-  | "submitted"
-  | "under_review"
-  | "resolved"
-  | "closed";
-
-export type Visibility =
-  | "public"
-  | "private"
-  | "moderators_only";
-
-export type ModerationOutcome =
-  | "approved"
-  | "rejected"
-  | "flagged"
-  | "escalated";
+import type { ReportStatus, Visibility, ModerationOutcome } from "./enums.js";
 
 export interface ReportProfile {
   id: string;
@@ -49,6 +33,42 @@ export interface ReportSummary {
   status: ReportStatus;
   createdAt: string;
   author: ReportProfile;
+}
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  displayName?: string;
+  avatarUrl?: string;
+  createdAt: string;
+  reportCount?: number;
+}
+
+export interface ProfileUpdate {
+  displayName?: string;
+  avatarUrl?: string;
+  bio?: string;
+}
+
+export interface StatusDetail {
+  current: ReportStatus;
+  previous?: ReportStatus;
+  reason?: string;
+  changedBy?: string;
+  changedAt: string;
+}
+
+export interface ReportDraft {
+  id: string;
+  authorId: string;
+  title: string;
+  description: string;
+  visibility: Visibility;
+  location?: string;
+  mediaUrls: string[];
+  status: Extract<ReportStatus, "draft">;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ModerationRecord {
