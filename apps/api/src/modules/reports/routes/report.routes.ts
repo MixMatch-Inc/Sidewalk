@@ -1,8 +1,8 @@
-import { Router } from "express";
+import { Router, type Router as RouterType } from "express";
 import { requireAuth } from "../../../shared/middleware/requireAuth.js";
 import { reportController } from "../controllers/report.controller.js";
 
-const router = Router();
+const router: RouterType = Router();
 
 router.post("/reports", requireAuth, reportController.create);
 router.get("/reports", requireAuth, reportController.list);
