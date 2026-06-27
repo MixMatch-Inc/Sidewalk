@@ -11,9 +11,9 @@ import type { LoginInput, RegisterInput } from "../validators/auth.validator.js"
 
 const PASSWORD_SALT_ROUNDS = 10;
 
-function signToken(userId: string): string {
+function signToken(userId: string, email: string): string {
   const options: jwt.SignOptions = { expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"] };
-  return jwt.sign({ sub: userId }, env.JWT_SECRET, options);
+  return jwt.sign({ sub: userId, email }, env.JWT_SECRET, options);
 }
 
 export const authService = {
@@ -40,7 +40,7 @@ export const authService = {
     }
 
     return {
-      token: signToken(user.id),
+      token: signToken(user.id, user.email),
       user: toPublicUser(user)
     };
   }

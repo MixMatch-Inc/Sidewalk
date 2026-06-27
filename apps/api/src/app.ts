@@ -7,6 +7,7 @@ import { env } from "./shared/config/env.js";
 import { errorHandler } from "./shared/middleware/errorHandler.js";
 import { authRouter } from "./modules/auth/routes/auth.routes.js";
 import { usersRouter } from "./modules/users/routes/users.routes.js";
+import reportRouter from "./modules/reports/routes/report.routes.js";
 
 export const app: Express = express();
 
@@ -21,5 +22,6 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
+app.use("/api", reportRouter);
 
 app.use(errorHandler);
