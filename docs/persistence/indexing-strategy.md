@@ -1,34 +1,23 @@
 # Persistence Indexing Strategy
 
-This document is a scaffold for
-[#549 — Add indexing strategy notes for report lookup and timeline queries](https://github.com/MixMatch-Inc/Sidewalk/issues/549).
-Each section below describes the shape of a concrete decision that the
-final note should make once the persistence schema in
-`apps/api/prisma/schema.prisma` and the report module under
-`apps/api/src/modules/reports/` have reached a steady shape. Replace
-the `TODO:` entries with the real rationale, field names, and index
-declarations as the supporting PRs land.
+This document captures the indexing decisions for the `Report` and `Moderation`
+models in `apps/api/prisma/schema.prisma`, with rationale for each index and
+guidance for future additions.
 
 ## 1. Goals
 
 - Optimize the report lookup and timeline queries exercised by
   `apps/api/src/modules/reports/`.
-- Keep write costs predictable as new models land (see
-  [#550](https://github.com/MixMatch-Inc/Sidewalk/issues/550),
-  [#551](https://github.com/MixMatch-Inc/Sidewalk/issues/551)).
+- Keep write overhead predictable as new models land.
 - Stay explicit about which indexes are correctness-critical (uniqueness,
   foreign keys) versus read-acceleration.
-- TODO: enumerate the specific read paths in the report module that drive
-  the index choice (status filter, author filter, timeline ordering, etc.).
 
 ## 2. Scope
 
 In scope:
 
 - Prisma `@@index` / `@@unique` declarations on the persistence layer.
-- Companion migration strategy (separate from
-  [#551](https://github.com/MixMatch-Inc/Sidewalk/issues/551), which targets
-  forward-compatibility of *fields*).
+- Migration notes for adding new indexes safely.
 
 Out of scope:
 
@@ -36,136 +25,148 @@ Out of scope:
 - Full-text search (separate workstream).
 - Mobile / web client caches.
 
-TODO: confirm with the report module owners whether `pagination` plus
-`status` plus `authorId` plus an eventual `createdAt` window is the full set
-of filters we expect at v1.
+---
 
-## 3. Current State
-
-### 3.1 Schema (`apps/api/prisma/schema.prisma`)
-
-Today the schema models only `User`:
+## 3. Current Schema
 
 ```prisma
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  displayName  String?
+  avatarUrl    String?
+  bio          String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  reports    Report[]
+  moderation Moderation[]
+}
+
+model Report {
+  id          String   @id @default(cuid())
+  authorId    String
+  title       String
+  description String
+  status      String   @default("draft")
+  visibility  String   @default("private")
+  location    String?
+  mediaUrls   String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author     User         @relation(fields: [authorId], references: [id])
+  moderation Moderation[]
+
+  @@index([authorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Moderation {
+  id          String   @id @default(cuid())
+  reportId    String
+  moderatorId String
+  outcome     String
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  report    Report @relation(fields: [reportId], references: [id])
+  moderator User   @relation(fields: [moderatorId], references: [id])
+
+  @@index([reportId])
+  @@index([moderatorId])
 }
 ```
 
-- `User.email` already has an implicit unique index — supports login lookups
-  in `apps/api/src/modules/auth/services/auth.service.ts` without an extra
-  scan.
+---
 
-### 3.2 Query patterns observed
+## 4. Index Rationale
 
-From `apps/api/src/modules/reports/controllers/report.controller.ts`, the
-report list endpoint currently reads two filters from `req.query`:
+### 4.1 `User`
 
-- `status` (`string | undefined`)
-- `authorId` (`string | undefined`)
+| Column | Index | Source |
+| ------ | ----- | ------ |
+| `email` | implicit `@unique` | Login lookups in `auth.service.ts` always filter by email. The unique constraint doubles as the read index — no additional `@@index` needed. |
 
-TODO: enumerate the remaining filters and ordering requirements once the
-`Report` model lands (see
-[#550](https://github.com/MixMatch-Inc/Sidewalk/issues/550)). For the v1
-list endpoint the minimum query surface is:
+### 4.2 `Report`
 
-- Filter by `status` and `authorId`.
-- Order by `createdAt desc` for the timeline view.
-- Paginate via `cursor` or `offset` (decision pending).
+The list endpoint in `report.controller.ts` reads two optional query params —
+`status` and `authorId` — and the timeline view orders by `createdAt desc`.
+Three single-column indexes cover all observed query patterns:
 
-### 3.3 What we don't yet have
+| Column | Index kind | Rationale |
+| ------ | ---------- | --------- |
+| `authorId` | `@@index` | Powers the `authorId` filter. Also backs the Prisma relation FK from `Report` to `User`. |
+| `status` | `@@index` | Powers the `status` filter. Avoids a full table scan when listing reports by state (e.g. `draft`, `resolved`). |
+| `createdAt` | `@@index` | Powers `ORDER BY createdAt DESC` for the timeline view. |
 
-- A `Report` model in the Prisma schema (referenced indirectly by the
-  controller).
-- A `ReportStatus` enum (referenced in `packages/shared/src/types/civic.ts`).
-- Audit and moderation tables (target of
-  [#551](https://github.com/MixMatch-Inc/Sidewalk/issues/551)).
+**Why not a composite index?**
+The `status` and `authorId` filters on the list endpoint are both optional —
+a request can carry either, both, or neither. A composite index on
+`(authorId, status, createdAt)` can only be used left-to-right; queries that
+omit `authorId` cannot use it. Three separate single-column indexes let the
+query planner choose the best index for each filter combination and are the
+correct choice for optional, independent predicates.
 
-## 4. Index Plan (v1)
+If a future query pattern _always_ filters by `(authorId, status)` before
+ordering by `createdAt`, add a targeted composite index at that time and
+document the specific query it serves.
 
-The plan below is **provisional** — it assumes the simplest viable Report
-shape. Final choices belong in `apps/api/prisma/schema.prisma` once
-[#550](https://github.com/MixMatch-Inc/Sidewalk/issues/550) lands.
+### 4.3 `Moderation`
 
-### 4.1 Report
+| Column | Index kind | Rationale |
+| ------ | ---------- | --------- |
+| `reportId` | `@@index` | Foreign-key index from `Moderation` back to `Report`. Prevents a full `Moderation` scan when loading the audit timeline for a single report. |
+| `moderatorId` | `@@index` | Powers moderator-scoped queries (e.g. "all moderation actions by user X"). Also backs the Prisma relation FK to `User`. |
 
-| Column(s)        | Index kind     | Rationale                                  |
-| ---------------- | -------------- | ------------------------------------------ |
-| `(authorId)`     | `@@index`      | Powers `authorId` filter on list endpoint. |
-| `(status)`       | `@@index`      | Powers `status` filter on list endpoint.   |
-| `(createdAt)`    | `@@index`      | Powers timeline ordering by recency.       |
-| `(authorId, status, createdAt)` | composite `@@index` (candidate) | Removes the sort step on the list endpoint *only if* the WHERE clause always filters by both columns. |
+A `createdAt` index on `Moderation` is not yet present. Add one if a timeline
+or paginated audit view orders moderation records by time.
 
-**Decision pending — composite vs. single-column.** Confirm with the
-report module whether listing is *always* filtered by both `authorId`
-and `status` before being ordered by `createdAt`.
+---
 
-- If yes (every list query carries both filters), the composite form
-  removes the sort step and is the better choice.
-- If either filter can be omitted on a given request, Prisma (and
-  SQLite / Postgres) cannot exploit the composite index left-to-right;
-  prefer two single-column `@@index` declarations and let the planner
-  sort.
+## 5. Adding New Indexes
 
-Document the chosen form here before opening the implementation PR.
+1. Add the `@@index([...])` declaration to the relevant model in
+   `apps/api/prisma/schema.prisma`.
+2. Push the change locally:
+   ```bash
+   pnpm --filter @sidewalk/api exec prisma db push
+   ```
+3. In production (Postgres), prefer `CREATE INDEX CONCURRENTLY` to avoid
+   locking the table during the index build. Prisma does not emit
+   `CONCURRENTLY` by default — manage that migration manually or via a raw
+   SQL migration file.
+4. Never add an index that duplicates an existing one. Prisma will error on
+   duplicate declarations, which is the intended safety net.
 
-### 4.2 Moderation / audit (forward-looking)
-
-Pending the schema additions in
-[#551](https://github.com/MixMatch-Inc/Sidewalk/issues/551), the audit
-table(s) introduced there will likely need indexes of their own. The
-exact shape is `TODO` until #551 defines it — at minimum expect:
-
-- A foreign-key index from the audit table back to `Report` (i.e.
-  `@@index([reportId])` once the relationship is named in the schema).
-- A secondary index on the audit timestamp column for moderation /
-  timeline views (e.g. `@@index([createdAt])`).
-
-Replace the placeholder names (`reportId`, `createdAt`) with the actual
-field names chosen in #551, then mirror those declarations here and in
-`schema.prisma`.
-
-## 5. Migration Safety
-
-- Adding an index is non-breaking at the API layer but can be expensive on a
-  large table. Prefer `CREATE INDEX CONCURRENTLY` semantics if we migrate
-  off SQLite (see env note in
-  [environment.md](../environment.md) about managed Postgres in production).
-- Never add an index that duplicates an existing one — Prisma will error
-  out, which is the desired safety net.
-- TODO: document how this scaffold's index plan interacts with the
-  migration-safe-fields work in
-  [#551](https://github.com/MixMatch-Inc/Sidewalk/issues/551) once both
-  PRs land.
+---
 
 ## 6. Validation
 
-Before opening the real (non-scaffold) PR, the index additions should be
-verified by:
+Before merging any schema change that adds an index:
 
-- `pnpm --filter @sidewalk/api typecheck` — schema must still type-check.
-- `pnpm --filter @sidewalk/api test` — existing report module tests should
-  pass without modification.
-- An `EXPLAIN` / `EXPLAIN ANALYZE` on the production-shaped query for the
-  v1 list endpoint, captured in a comment under the relevant controller.
+```bash
+pnpm --filter @sidewalk/api typecheck   # schema must still compile
+pnpm --filter @sidewalk/api test        # existing tests must pass unchanged
+```
 
-TODO: link to the first test that exercises the indexed query once it
-exists.
+For significant queries, capture an `EXPLAIN ANALYZE` on a
+representative dataset and include the output in the PR description.
+
+---
 
 ## 7. Open Questions
 
-- Pagination strategy: cursor-based vs. offset-based — affects how
-  `createdAt` is indexed.
-- Soft-delete: do we mark `Report.deletedAt` and rely on a partial
-  index (`@@index([...])` with a `WHERE deletedAt IS NULL` clause),
-  or hard-delete? Native partial-index support in Prisma is still an
-  evolving area and the exact predicate syntax differs between
-  `@@unique` and `@@index`; defer this decision until a soft-delete
-  column is actually added.
-- Multi-region: if reports can be region-scoped, do we need a leading
-  `regionId` in the composite index?
-
+- **Pagination strategy:** The list endpoint currently returns all matching
+  records. When cursor-based pagination is added, the `createdAt` index will
+  serve as the cursor anchor. Offset-based pagination does not change the
+  index shape but is less efficient on large tables.
+- **Soft delete:** If a `deletedAt` column is added to `Report`, consider a
+  partial index (`WHERE deletedAt IS NULL`) to exclude deleted rows from list
+  scans. Prisma's support for partial-index predicates on `@@index` is still
+  evolving; revisit when the column lands.
+- **Region scoping:** If reports become region-scoped, a leading `regionId`
+  column in the composite index may be warranted. Defer until the feature is
+  specced.

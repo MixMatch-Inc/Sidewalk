@@ -1,127 +1,127 @@
-# Seed and Reset Helpers for Local Development
+# Seed and Reset Workflow
 
-This document is a scaffold for
-[#548 — Add seed and reset helpers for a richer local development dataset](https://github.com/MixMatch-Inc/Sidewalk/issues/548).
+This document describes how to seed your local SQLite database with development
+fixtures and how to reset it to a clean state when something goes wrong.
 
-It captures the shape of the helpers needed so the final implementation
-PR can fill in concrete functions without restructuring the directory
-layout or the package scripts.
+## Prerequisites
 
-## 1. Goals
+The scripts below use `dotenv-cli` and `tsx`, both already present as
+dev-dependencies in `apps/api/package.json`. All commands run from the
+repo root unless noted otherwise.
 
-- One-command seed of a richer local SQLite dataset that exercises
-  auth, reports, and audit surfaces end-to-end.
-- One-command reset that returns the local database to a known-clean
-  state without forcing the user to delete files by hand.
-- Both commands run from the repo root via `pnpm` filters, matching
-  the monorepo convention documented in
-  [environment.md](../environment.md).
+---
 
-`TODO`: enumerate exact user roles / sample counts once the report
-module ships its `Report` and `ReportDraft` fixtures (see
-[#550](https://github.com/MixMatch-Inc/Sidewalk/issues/550)).
+## Local Reset
 
-## 2. Script Layout
+Resetting returns the local SQLite database to an empty, schema-correct state.
 
-`apps/api/prisma/` is the conventional Prisma location for seed
-configuration, and a sibling `scripts/` directory under `apps/api/`
-is the conventional location for non-seed helpers (reset, migration
-utilities, etc.) that do not fit Prisma's seed contract:
+### Quick reset (recommended)
 
-```text
-apps/api/
-  prisma/
-    schema.prisma       (existing)
-    seed.ts             (added by this issue — see §3)
-  scripts/
-    reset-db.ts         (added by this issue — see §4)
+The `pretest` hook in `apps/api/package.json` already does a full reset:
+
+```bash
+pnpm --filter @sidewalk/api exec dotenv -e .env.test -- prisma db push --force-reset --skip-generate
 ```
 
-`TODO`: confirm with maintainers whether the `@sidewalk/api`
-`package.json` needs a `"prisma": { "seed": "..." }` entry, or
-whether the existing `pnpm --filter @sidewalk/api exec prisma db seed`
-invocation is sufficient given the `pretest` hook in
-[testing.md](../testing.md).
+You can run the same command against your development `.env` to reset your
+local dev database:
 
-## 3. Seed Shape (`apps/api/prisma/seed.ts`)
-
-The seed should be **idempotent** — `upsert`-based — so re-running it
-does not error on unique-constraint collisions. Suggested dataset
-blocks:
-
-| Block              | Records | Purpose                                       |
-| ------------------ | ------- | --------------------------------------------- |
-| `users`            | ~5      | Auth surface coverage (one admin, four users). |
-| `reports`          | ~10     | Per-user submissions across statuses.          |
-| `moderationEvents` | ~5      | Audit timeline fixtures.                       |
-
-`TODO`: replace the placeholder counts with the chosen fixture
-shape once [#550](https://github.com/MixMatch-Inc/Sidewalk/issues/550)
-and [#551](https://github.com/MixMatch-Inc/Sidewalk/issues/551) land
-the underlying models. Until then, only the `users` block is safe to
-seed against the current schema.
-
-## 4. Reset Workflow (`apps/api/scripts/reset-db.ts`)
-
-The reset helper must:
-
-1. Delete the SQLite file referenced by `DATABASE_URL` in
-   [`apps/api/.env.test`](../../apps/api/.env.test) (or the
-   equivalent local `.env`).
-2. Re-run `prisma db push` to recreate the empty schema.
-3. Optionally re-run the seed, gated by a `--with-seed` flag.
-
-Allowed access patterns: shell out via `child_process`, or import
-the Prisma client and call `$disconnect()` before unlinking. `TODO`
-in the implementation file marks the chosen path.
-
-`TODO`: confirm whether `pretest` (per
-[testing.md](../testing.md)) already covers this and the
-`reset-db.ts` script is therefore only needed for *ad-hoc* developer
-resets. If yes, the script is optional; if no, it is required for
-CI parity.
-
-## 5. Package Scripts
-
-Add the following entries to `apps/api/package.json` (replace `tsx`
-with whichever TS execution tool `@sidewalk/api` already depends on
-— `tsx`, `ts-node`, etc. — see §7):
-
-```json
-{
-  "scripts": {
-    "db:seed": "prisma db seed",
-    "db:reset": "tsx scripts/reset-db.ts"
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  }
-}
+```bash
+pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db push --force-reset --skip-generate
 ```
 
-`TODO`: validate the exact script names match the project's
-convention by checking other apps and shared packages for analogous
-`db:*` entries. Adopt their style; do not invent a new prefix.
+`--force-reset` drops the existing SQLite file and recreates it from the
+current schema. `--skip-generate` is safe here because the Prisma client was
+already generated at build/typecheck time.
 
-## 6. Validation
+### What `--force-reset` does
 
-- `pnpm --filter @sidewalk/api db:seed` runs without error against a
-  fresh SQLite DB.
-- `pnpm --filter @sidewalk/api db:reset --with-seed` returns the DB
-  to a fully seeded state from a single command.
-- `pnpm --filter @sidewalk/api typecheck` still passes.
-- `pnpm --filter @sidewalk/api test` still passes (audit fixtures
-  must not collide with hand-rolled test data).
+1. Deletes the SQLite database file referenced by `DATABASE_URL` in your
+   `.env` (or `.env.test`).
+2. Recreates the file and applies the current `schema.prisma` in one step.
 
-## 7. Open Questions
+No data is preserved. This is intentional — the goal is a known-clean state.
 
-- Is `tsx` already a dev-dependency of `@sidewalk/api`? If not, the
-  implementation PR will need to add it; flag the install footprint
-  in the PR description.
-- Do we seed `passwordHash` values directly (faster) or call
-  `auth.service.register` for each one (slower but exercises the
-  bcrypt path)? Pick whichever matches the team's habits in other
-  services.
-- Should fixtures live in `apps/api/prisma/fixtures/*.json` rather
-  than be inlined in `seed.ts`? That decision belongs to whoever
-  picks up this issue in earnest.
+---
+
+## Seeding
+
+After a reset you may want to populate the database with enough data to
+exercise the app end-to-end.
+
+### Run the seed
+
+```bash
+pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db seed
+```
+
+The seed script is located at `apps/api/prisma/seed.ts` and is registered in
+`apps/api/package.json` under `"prisma": { "seed": "tsx prisma/seed.ts" }`.
+
+The seed is **idempotent** — it uses `upsert` calls so re-running it on an
+already-seeded database is safe.
+
+### What the seed creates
+
+| Block | Records | Purpose |
+| ----- | ------- | ------- |
+| `users` | ~5 | Auth surface coverage (one admin, four regular users) |
+| `reports` | ~10 | Per-user submissions spread across all valid statuses |
+| `moderationEvents` | ~5 | Audit timeline fixtures for the moderation surface |
+
+> **Note:** The `reports` and `moderationEvents` blocks depend on the `Report`
+> and `Moderation` models defined in `schema.prisma`. If those models are not
+> yet present in your branch, only the `users` block will seed successfully.
+
+---
+
+## Reset + seed in one step
+
+```bash
+pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db push --force-reset --skip-generate \
+  && pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db seed
+```
+
+---
+
+## Switching between dev and test databases
+
+The API uses two separate SQLite files:
+
+| Environment | File (set by `DATABASE_URL`) | Used by |
+| ----------- | --------------------------- | ------- |
+| Development | `apps/api/prisma/dev.db` (default in `.env`) | `pnpm dev:api` |
+| Test | `apps/api/prisma/test.db` (default in `.env.test`) | `pnpm test` |
+
+The `pretest` script resets and regenerates the **test** database automatically
+before every `pnpm test` run. You do not need to manage the test database by
+hand.
+
+---
+
+## Troubleshooting
+
+**`P1000` / "unable to open database file"**
+The directory referenced by `DATABASE_URL` does not exist. Create it:
+```bash
+mkdir -p apps/api/prisma
+```
+
+**"The table `X` does not exist"**
+The schema has not been pushed yet. Run:
+```bash
+pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db push
+```
+
+**Prisma client out of date after a schema change**
+Regenerate the client:
+```bash
+pnpm --filter @sidewalk/api exec prisma generate
+```
+
+**Seed fails with unique-constraint errors**
+The database already contains conflicting data. Reset first, then seed:
+```bash
+pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db push --force-reset --skip-generate
+pnpm --filter @sidewalk/api exec dotenv -e .env -- prisma db seed
+```
