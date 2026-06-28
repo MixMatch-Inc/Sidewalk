@@ -7,6 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -19,39 +23,95 @@ model User {
 
   reports      Report[]
   moderation   Moderation[]
+  auditEvents  AuditEvent[]
 }
+
+// ---------------------------------------------------------------------------
+// Reports  (#560 — draft/submission lifecycle via status enum)
+// ---------------------------------------------------------------------------
 
 model Report {
   id          String   @id @default(cuid())
   authorId    String
   title       String
   description String
+  /// ReportStatus: draft | submitted | under_review | resolved | closed
   status      String   @default("draft")
+  /// Visibility: public | private | moderators_only
   visibility  String   @default("private")
   location    String?
-  mediaUrls   String   @default("[]")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  author      User       @relation(fields: [authorId], references: [id])
+  // #561 — migration-safe nullable assignment field
+  assignedModeratorId String?
+
+  author      User         @relation(fields: [authorId], references: [id])
   moderation  Moderation[]
+  media       ReportMedia[]
 
   @@index([authorId])
   @@index([status])
   @@index([createdAt])
+  @@index([assignedModeratorId])
 }
 
+// ---------------------------------------------------------------------------
+// ReportMedia  (#562 — attachment metadata without touching Report)
+// ---------------------------------------------------------------------------
+
+model ReportMedia {
+  id        String   @id @default(cuid())
+  reportId  String
+  url       String
+  mimeType  String?
+  sizeBytes Int?
+  caption   String?
+  createdAt DateTime @default(now())
+
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+}
+
+// ---------------------------------------------------------------------------
+// Moderation  (#561 — migration-safe auditAt field)
+// ---------------------------------------------------------------------------
+
 model Moderation {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   reportId    String
   moderatorId String
   outcome     String
   reason      String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  // #561 — nullable audit timestamp; safe to add to existing rows
+  auditAt     DateTime?
 
   report     Report @relation(fields: [reportId], references: [id])
   moderator  User   @relation(fields: [moderatorId], references: [id])
 
   @@index([reportId])
   @@index([moderatorId])
+}
+
+// ---------------------------------------------------------------------------
+// AuditEvent  (#561 — forward-compatible audit table)
+// ---------------------------------------------------------------------------
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  actorUserId String
+  /// Discriminated event type, e.g. "report.created", "moderation.approved"
+  eventType   String
+  /// JSON payload — shape documented per eventType
+  payload     String   @default("{}")
+  actorIpHash String?
+  createdAt   DateTime @default(now())
+
+  actor       User     @relation(fields: [actorUserId], references: [id])
+
+  @@index([actorUserId])
+  @@index([eventType])
+  @@index([createdAt])
 }

@@ -10,7 +10,12 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "dotenv -e .env.test -- prisma generate && tsc -p tsconfig.json --noEmit",
     "pretest": "dotenv -e .env.test -- prisma generate && dotenv -e .env.test -- prisma db push --force-reset --skip-generate",
-    "test": "dotenv -e .env.test -- vitest run"
+    "test": "dotenv -e .env.test -- vitest run",
+    "db:seed": "prisma db seed",
+    "db:reset": "tsx scripts/reset-db.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
