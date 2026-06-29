@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install *)",
+      "Bash(pnpm --filter @sidewalk/shared build)",
+      "Bash(pnpm --filter @sidewalk/shared test)",
+      "Bash(pnpm --filter @sidewalk/api test)",
+      "Bash(pnpm --filter @sidewalk/web test)"
+    ]
+  }
+}
