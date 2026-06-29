@@ -37,3 +37,6 @@ jobs:
 
       - name: Lint
         run: pnpm --filter ${{ matrix.package }} lint
+
+      - name: Test
+        run: pnpm --filter ${{ matrix.package }} test --if-present
